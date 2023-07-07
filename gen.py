@@ -23,10 +23,10 @@ from litex.soc.integration.builder import Builder
 from litedram.frontend.wishbone import *
 
 from litedram import modules as litedram_modules
-from litedram.phy import PHYNone
 from litedram.core.controller import ControllerSettings
 
 from dram_core import DRAMCore
+from dram_phy  import PHYNone
 
 # ------------------------------------------------------------------------------
 
