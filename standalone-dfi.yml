@@ -1,0 +1,34 @@
+# Copyright (c) 2023 Antmicro <www.antmicro.com>
+# SPDX-License-Identifier: Apache-2.0
+
+{
+    # General ------------------------------------------------------------------
+    "speedgrade": -1,          # FPGA speedgrade
+
+    # SDRAM --------------------------------------------------------------------
+    "memtype":          "DDR3",        # DRAM type
+    "sdram_module":     "MT41K128M16", # SDRAM modules of the board or SO-DIMM
+    "sdram_data_nb":    16,            # Number of data bits
+    "sdram_module_nb":  2,             # Number of byte groups
+    "sdram_rank_nb":    1,             # Number of ranks
+
+    # DFI ----------------------------------------------------------------------
+    # Override DFI address and bank widths
+    "dfi_nphases":      1,
+    "dfi_addressbits":  16,
+    "dfi_bankbits":     3,
+
+    # Frequency ----------------------------------------------------------------
+    "sys_clk_freq":     100e6, # System clock frequency
+
+    # Core ---------------------------------------------------------------------
+    "cmd_buffer_depth": 16,    # Depth of the command buffer
+
+    # User Ports ---------------------------------------------------------------
+    "user_ports": {
+        "wishbone_0" : {
+            "type":  "wishbone",
+            "block_until_ready": True,
+        },
+    },
+}
