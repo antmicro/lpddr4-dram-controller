@@ -18,7 +18,7 @@ from litex.soc.integration.soc import LiteXSoC
 
 from litex.build.generic_toolchain import GenericToolchain
 from litex.build.generic_platform import GenericPlatform, Pins, Subsignal
-from litex.soc.integration.builder import builder_argdict, builder_args, Builder
+from litex.soc.integration.builder import Builder
 
 from litedram.frontend.wishbone import *
 
@@ -244,18 +244,13 @@ class DRAMCoreControl(Module, AutoCSR):
 
 class DRAMCoreSoC(LiteXSoC):
 
-    def add_csr(self, csr_name, csr_id=None, use_loc_if_exists=False):
-        self.csr.add(csr_name, csr_id, use_loc_if_exists=use_loc_if_exists)
-
-    def add_csr_region(self, name, origin, busword, obj):
-        self.csr_regions[name] = SoCCSRRegion(origin, busword, obj)
-
     def __init__(self, platform, core_config, **kwargs):
         platform.add_extension(get_common_ios())
 
         # Parameters -------------------------------------------------------------------------------
         sys_clk_freq   = core_config["sys_clk_freq"]
         csr_data_width = core_config.get("csr_data_width", 32)
+        csr_base       = core_config.get("csr_base", 0xF0000000)
         rate           = "1:{}".format(core_config.get("sdram_ratio", 4))
 
         # SoCCore ----------------------------------------------------------------------------------
@@ -288,7 +283,7 @@ class DRAMCoreSoC(LiteXSoC):
         self.csr_regions    = {}
         self.mem_regions    = self.bus.regions
         self.mem_map        = {
-            "csr":  0xF000_0000,
+            "csr":  csr_base,
         }
 
         self.wb_slaves      = {}
@@ -547,12 +542,28 @@ class DRAMCoreSoC(LiteXSoC):
 
 def main():
     parser = argparse.ArgumentParser(description="DRAM standalone core generator")
-    builder_args(parser)
-    parser.set_defaults(output_dir="build")
-    parser.add_argument("config", help="YAML config file")
-    parser.add_argument("--name", default="dram_ctrl", help="Standalone core/module name")
+
+    parser.add_argument(
+        "config",
+        type=str,
+        help="YAML config file"
+    )
+    parser.add_argument(
+        "--output-dir",
+        type=str,
+        default="build",
+        help="Base Output directory."
+    )
+    parser.add_argument(
+        "--name",
+        type=str,
+        default="dram_ctrl",
+        help="Standalone core/module name"
+    )
+
     args = parser.parse_args()
 
+    # Load the config
     core_config = yaml.load(open(args.config).read(), Loader=yaml.Loader)
 
     # Convert YAML elements to Python/LiteX --------------------------------------------------------
@@ -568,8 +579,16 @@ def main():
 
     # Generate core --------------------------------------------------------------------------------
 
-    builder_arguments = builder_argdict(args)
-    builder_arguments["compile_gateware"] = False
+    builder_arguments = {
+        "output_dir":       args.output_dir,
+        "gateware_dir":     None,
+        "software_dir":     None,
+        "include_dir":      None,
+        "generated_dir":    None,
+        "compile_software": False,
+        "compile_gateware": False,
+        "csr_csv":          os.path.join(args.output_dir, "csr.csv")
+    }
 
     platform = NoPlatform("", io=[])
     soc     = DRAMCoreSoC(platform, core_config)

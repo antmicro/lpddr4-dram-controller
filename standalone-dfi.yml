@@ -22,6 +22,7 @@
     "sys_clk_freq":     100e6, # System clock frequency
 
     # Core ---------------------------------------------------------------------
+    "csr_base":         0xF1000000, # CSR bank base address
     "cmd_buffer_depth": 16,    # Depth of the command buffer
 
     # User Ports ---------------------------------------------------------------
