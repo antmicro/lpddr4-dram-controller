@@ -22,14 +22,15 @@
     "sys_clk_freq":     100e6, # System clock frequency
 
     # Core ---------------------------------------------------------------------
-    "csr_base":         0xF1000000, # CSR bank base address
+    "csr_base":         0x83000000, # CSR bank base address
     "cmd_buffer_depth": 16,    # Depth of the command buffer
 
     # User Ports ---------------------------------------------------------------
     "user_ports": {
         "wishbone_0" : {
-            "type":  "wishbone",
-            "block_until_ready": True,
+            "type":                 "wishbone",
+            "data_width":           32,
+            "block_until_ready":    True,
         },
     },
 }
