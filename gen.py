@@ -66,76 +66,13 @@ def get_common_ios():
         ("clk", 0, Pins(1)),
         ("rst", 0, Pins(1)),
 
+        # Low-level memory control
+        ("mem_rst", 0, Pins(1)),
+
         # Init status.
         ("init_done",  0, Pins(1)),
         ("init_error", 0, Pins(1)),
     ]
-
-def get_dram_ios(core_config):
-    assert core_config["memtype"] in ["SDR", "DDR2", "DDR3", "DDR4"]
-
-    # SDR.
-    if core_config["memtype"] in ["SDR"]:
-        return [
-            ("sdram", 0,
-                Subsignal("a",       Pins(log2_int(core_config["sdram_module"].nrows))),
-                Subsignal("ba",      Pins(log2_int(core_config["sdram_module"].nbanks))),
-                Subsignal("ras_n",   Pins(1)),
-                Subsignal("cas_n",   Pins(1)),
-                Subsignal("we_n",    Pins(1)),
-                Subsignal("cs_n",    Pins(1)),
-                Subsignal("dm",      Pins(core_config["sdram_module_nb"])),
-                Subsignal("dq",      Pins(8*core_config["sdram_module_nb"])),
-                Subsignal("cke",     Pins(1))
-            ),
-        ]
-
-    # DDR2 / DDR3.
-    if core_config["memtype"] in ["DDR2", "DDR3"]:
-        return [
-            ("ddram", 0,
-                Subsignal("a",       Pins(log2_int(core_config["sdram_module"].nrows))),
-                Subsignal("ba",      Pins(log2_int(core_config["sdram_module"].nbanks))),
-                Subsignal("ras_n",   Pins(1)),
-                Subsignal("cas_n",   Pins(1)),
-                Subsignal("we_n",    Pins(1)),
-                Subsignal("cs_n",    Pins(core_config["sdram_rank_nb"])),
-                Subsignal("dm",      Pins(core_config["sdram_module_nb"])),
-                Subsignal("dq",      Pins(8*core_config["sdram_module_nb"])),
-                Subsignal("dqs_p",   Pins(core_config["sdram_module_nb"])),
-                Subsignal("dqs_n",   Pins(core_config["sdram_module_nb"])),
-                Subsignal("clk_p",   Pins(core_config["sdram_rank_nb"])),
-                Subsignal("clk_n",   Pins(core_config["sdram_rank_nb"])),
-                Subsignal("cke",     Pins(core_config["sdram_rank_nb"])),
-                Subsignal("odt",     Pins(core_config["sdram_rank_nb"])),
-                Subsignal("reset_n", Pins(1))
-            ),
-        ]
-    # DDR4.
-    if core_config["memtype"] == "DDR4":
-        # On DDR4, A14. A15 and A16 are shared with we_n/cas_n/ras_n
-        a_width = min(log2_int(core_config["sdram_module"].nrows), 14)
-        return [
-            ("ddram", 0,
-                Subsignal("a",       Pins(a_width)),
-                Subsignal("ba",      Pins(log2_int(core_config["sdram_module"].ngroupbanks))),
-                Subsignal("bg",      Pins(log2_int(core_config["sdram_module"].ngroups))),
-                Subsignal("ras_n",   Pins(1)),
-                Subsignal("cas_n",   Pins(1)),
-                Subsignal("we_n",    Pins(1)),
-                Subsignal("cs_n",    Pins(core_config["sdram_rank_nb"])),
-                Subsignal("act_n",   Pins(1)),
-                Subsignal("dm",      Pins(core_config["sdram_module_nb"])),
-                Subsignal("dq",      Pins(8*core_config["sdram_module_nb"])),
-                Subsignal("dqs_p",   Pins(core_config["sdram_module_nb"])),
-                Subsignal("dqs_n",   Pins(core_config["sdram_module_nb"])),
-                Subsignal("clk_p",   Pins(core_config["sdram_rank_nb"])),
-                Subsignal("clk_n",   Pins(core_config["sdram_rank_nb"])),
-                Subsignal("cke",     Pins(core_config["sdram_rank_nb"])),
-                Subsignal("odt",     Pins(core_config["sdram_rank_nb"])),
-                Subsignal("reset_n", Pins(1))
-            ),
-        ]
 
 def get_native_user_port_ios(_id, aw, dw):
     return [
@@ -301,7 +238,6 @@ class DRAMCoreSoC(LiteXSoC):
 
         # DRAM Interface ---------------------------------------------------------------------------
 
-        platform.add_extension(get_dram_ios(core_config))
         sdram_module = core_config["sdram_module"](sys_clk_freq, rate=rate)
 
         # Collect Electrical Settings.
@@ -328,6 +264,10 @@ class DRAMCoreSoC(LiteXSoC):
             if core_config.get(name, None) is not None:
                 controller_settings_kwargs[name] = core_config[name]
         controller_settings = controller_settings = ControllerSettings(**controller_settings_kwargs)
+
+        # Low-level PHY interface
+        pad = self.platform.request("mem_rst")
+        self.comb += pad.eq(sdram_phy._rst.storage)
 
         # DRAM Controller --------------------------------------------------------------------------
 
