@@ -7,7 +7,7 @@
 
     # SDRAM --------------------------------------------------------------------
     "memtype":          "DDR3",        # DRAM type
-    "sdram_module":     "MT41K128M16", # SDRAM modules of the board or SO-DIMM
+    "sdram_module":     "MT41K64M16",  # SDRAM modules of the board or SO-DIMM
     "sdram_data_nb":    16,            # Number of data bits
     "sdram_module_nb":  2,             # Number of byte groups
     "sdram_rank_nb":    1,             # Number of ranks
@@ -15,11 +15,11 @@
     # DFI ----------------------------------------------------------------------
     # Override DFI address and bank widths
     "dfi_nphases":      1,
-    "dfi_addressbits":  16,
+    "dfi_addressbits":  13,
     "dfi_bankbits":     3,
 
     # Frequency ----------------------------------------------------------------
-    "sys_clk_freq":     100e6, # System clock frequency
+    "sys_clk_freq":     75e6,  # System clock frequency
 
     # Core ---------------------------------------------------------------------
     "csr_base":         0x83000000, # CSR bank base address
