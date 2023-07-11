@@ -255,6 +255,12 @@ class DRAMCoreSoC(LiteXSoC):
             bankbits         = core_config.get("dfi_bankbits",    2),
             nranks           = core_config.get("sdram_rank_nb",   1),
             ratio            = int(rate.split(":")[-1]),
+            cl               = 5,
+            cwl              = 5,
+            cmd_latency      = 0,
+            cmd_delay        = None,
+            cl_phy           = 0,
+            cwl_phy          = 3,
         )
         self.expose_dfi(platform, sdram_phy.dfi)
 
