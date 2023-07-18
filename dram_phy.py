@@ -8,6 +8,8 @@ from litedram.phy.dfi import *
 
 from litex.soc.interconnect.csr import *
 
+from common import *
+
 # ==============================================================================
 
 class PHYNone(Module, AutoCSR):
@@ -30,7 +32,6 @@ class PHYNone(Module, AutoCSR):
         cwl             = None,
         cmd_latency     = 0,
         cmd_delay       = None,
-        cl_phy          = 9,
         cwl_phy         = 0,
         ):
 
@@ -100,7 +101,7 @@ class PHYNone(Module, AutoCSR):
             wrphase                   = 0 if nphases == 1 else self._wrphase.storage,
             cl                        = cl,
             cwl                       = cwl,
-            read_latency              = cl_sys_latency + cl_phy, # 12, # 9 + ((RL+1)/2) - 9 is PHY, RL is latency in memory ticks
+            read_latency              = None, # read latency is controlled by PHY
             write_latency             = write_latency,
             t_phy_wrlat               = write_latency,
             cmd_latency               = cmd_latency,

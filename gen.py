@@ -259,7 +259,6 @@ class DRAMCoreSoC(LiteXSoC):
             cwl              = 5,
             cmd_latency      = 0,
             cmd_delay        = None,
-            cl_phy           = 0,
             cwl_phy          = 3,
         )
         self.expose_dfi(platform, sdram_phy.dfi)

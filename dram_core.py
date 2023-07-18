@@ -10,8 +10,9 @@ from litedram.phy import dfi
 from litedram.dfii import DFIInjector
 from litedram.core.refresher import Refresher
 from litedram.core.bankmachine import BankMachine
-from litedram.core.multiplexer import Multiplexer
-from litedram.core.crossbar import LiteDRAMCrossbar
+from common import *
+from multiplexer import Multiplexer
+from dram_crossbar import DRAMCrossbar
 
 from litedram.core.controller import ControllerSettings, \
                                      LiteDRAMControllerRegisterBank
@@ -47,7 +48,7 @@ class DRAMController(Module):
         timing_regs = registers.get_register_signals()
 
         # LiteDRAM Interface (User) --------------------------------------------
-        self.interface = interface = LiteDRAMInterface(
+        self.interface = interface = DRAMInterface(
             address_align, self.settings)
 
         # DFI Interface (Memory) -----------------------------------------------
@@ -148,4 +149,4 @@ class DRAMCore(Module, AutoCSR):
             **kwargs)
         self.comb += controller.dfi.connect(self.dfii.slave)
 
-        self.submodules.crossbar = LiteDRAMCrossbar(controller.interface)
+        self.submodules.crossbar = DRAMCrossbar(controller.interface)
