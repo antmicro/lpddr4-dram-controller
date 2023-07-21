@@ -20,3 +20,11 @@ Generate the core using the example configuration:
 ```
 
 Build files should be written to the `build` directory by default.
+
+## Testing
+
+Go to the `tests` directory and run `make sim`:
+```bash
+cd tests
+make sim
+```
