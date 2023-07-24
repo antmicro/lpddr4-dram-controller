@@ -18,11 +18,91 @@ from litex.soc.interconnect import stream
 from litex.soc.interconnect.csr import AutoCSR
 
 from litedram.common import *
-from litedram.core.multiplexer import _CommandChooser, _Steerer
-from litedram.core.multiplexer import STEER_NOP, STEER_CMD, STEER_REQ, STEER_REFRESH
+from litedram.core.multiplexer import _CommandChooser
 from litedram.core.bandwidth import Bandwidth
 
 from common import *
+
+# _Steerer -----------------------------------------------------------------------------------------
+
+(STEER_NOP, STEER_CMD, STEER_REQ, STEER_REFRESH) = range(4)
+
+class _Steerer(Module):
+    """Connects selected request to DFI interface
+
+    cas/ras/we/is_write/is_read are connected only when `cmd.valid & cmd.ready`.
+    Rank bits are decoded and used to drive cs_n in multi-rank systems,
+    STEER_REFRESH always enables all ranks.
+
+    Parameters
+    ----------
+    commands : [Endpoint(cmd_request_rw_layout), ...]
+        Command streams to choose from. Must be of len=4 in the order:
+            NOP, CMD, REQ, REFRESH
+        NOP can be of type Record(cmd_request_rw_layout) instead, so that it is
+        always considered invalid (because of lack of the `valid` attribute).
+    dfi : dfi.Interface
+        DFI interface connected to PHY
+
+    Attributes
+    ----------
+    sel : [Signal(max=len(commands)), ...], in
+        Signals for selecting which request gets connected to the corresponding
+        DFI phase. The signals should take one of the values from STEER_* to
+        select given source.
+    """
+    def __init__(self, commands, dfi, t_phy_wrlat=0):
+        ncmd = len(commands)
+        nph  = len(dfi.phases)
+        self.sel = [Signal(max=ncmd) for i in range(nph)]
+
+        # # #
+
+        def valid_and(cmd, attr):
+            if not hasattr(cmd, "valid"):
+                return 0
+            else:
+                return cmd.valid & cmd.ready & getattr(cmd, attr)
+
+        for i, (phase, sel) in enumerate(zip(dfi.phases, self.sel)):
+            nranks   = len(phase.cs_n)
+            rankbits = log2_int(nranks)
+            if hasattr(phase, "reset_n"):
+                self.comb += phase.reset_n.eq(1)
+            self.comb += phase.cke.eq(Replicate(Signal(reset=1), nranks))
+            if hasattr(phase, "odt"):
+                self.comb += phase.odt.eq(~phase.we_n)
+            if rankbits:
+                rank_decoder = Decoder(nranks)
+                self.submodules += rank_decoder
+                self.comb += rank_decoder.i.eq((Array(cmd.ba[-rankbits:] for cmd in commands)[sel]))
+                if i == 0: # Select all ranks on refresh.
+                    self.sync += If(sel == STEER_REFRESH, phase.cs_n.eq(0)).Else(phase.cs_n.eq(~rank_decoder.o))
+                else:
+                    self.sync += phase.cs_n.eq(~rank_decoder.o)
+                self.sync += phase.bank.eq(Array(cmd.ba[:-rankbits] for cmd in commands)[sel])
+            else:
+                self.sync += phase.cs_n.eq(0)
+                self.sync += phase.bank.eq(Array(cmd.ba[:] for cmd in commands)[sel])
+
+            self.sync += [
+                phase.address.eq(Array(cmd.a for cmd in commands)[sel]),
+                phase.cas_n.eq(~Array(valid_and(cmd, "cas") for cmd in commands)[sel]),
+                phase.ras_n.eq(~Array(valid_and(cmd, "ras") for cmd in commands)[sel]),
+                phase.we_n.eq(~Array(valid_and(cmd, "we") for cmd in commands)[sel])
+            ]
+
+            wrdata_ens = Array(valid_and(cmd, "is_write") for cmd in commands)
+            wrdata_en  = wrdata_ens[sel]
+
+            for i in range(t_phy_wrlat):
+                new_wrdata_en = Signal()
+                self.sync += new_wrdata_en.eq(wrdata_en)
+                wrdata_en  = new_wrdata_en
+            self.sync += phase.wrdata_en.eq(wrdata_en)
+
+            rddata_ens = Array(valid_and(cmd, "is_read") for cmd in commands)
+            self.sync += phase.rddata_en.eq(rddata_ens[sel])
 
 # Multiplexer --------------------------------------------------------------------------------------
 
