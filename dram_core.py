@@ -6,7 +6,6 @@ from migen import *
 
 from litex.soc.interconnect.csr import CSRStorage, CSRStatus, CSRField, AutoCSR
 from litedram.common import *
-from litedram.phy import dfi
 from litedram.dfii import DFIInjector
 from litedram.core.refresher import Refresher
 from litedram.core.bankmachine import BankMachine
@@ -16,6 +15,8 @@ from dram_crossbar import DRAMCrossbar
 
 from litedram.core.controller import ControllerSettings, \
                                      LiteDRAMControllerRegisterBank
+
+import dfi
 
 # ==============================================================================
 

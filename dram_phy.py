@@ -9,6 +9,7 @@ from litedram.phy.dfi import *
 from litex.soc.interconnect.csr import *
 
 from common import *
+from dfi import *
 
 # ==============================================================================
 
