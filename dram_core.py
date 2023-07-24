@@ -5,10 +5,11 @@
 from migen import *
 
 from litex.soc.interconnect.csr import CSRStorage, CSRStatus, CSRField, AutoCSR
-from litedram.dfii import DFIInjector
 from litedram.core.bankmachine import BankMachine
+
 from common import *
 from multiplexer import Multiplexer
+from dfi_injector import DFIInjector
 from dram_crossbar import DRAMCrossbar
 
 from litedram.core.controller import ControllerSettings, \
