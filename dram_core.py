@@ -5,18 +5,50 @@
 from migen import *
 
 from litex.soc.interconnect.csr import CSRStorage, CSRStatus, CSRField, AutoCSR
-from litedram.common import *
 from litedram.dfii import DFIInjector
-from litedram.core.refresher import Refresher
 from litedram.core.bankmachine import BankMachine
 from common import *
 from multiplexer import Multiplexer
 from dram_crossbar import DRAMCrossbar
 
 from litedram.core.controller import ControllerSettings, \
-                                     LiteDRAMControllerRegisterBank
+    LiteDRAMControllerRegisterBank, REGISTER_NAMES
 
 import dfi
+
+# ==============================================================================
+
+class DRAMControllerRegisterBank(LiteDRAMControllerRegisterBank):
+    def __init__(self, phy_settings, initial_timings, max_expected_values, memtype):
+        for reg in REGISTER_NAMES:
+            if reg == "tZQCS" and memtype in ["LPDDR4", "LPDDR5", "DDR5"]:
+                continue # ZQCS refresher does not work with LPDDR4, LPDDR5 and DDR5
+            try:
+                width = getattr(max_expected_values, reg)
+            except AttributeError:
+                width = None
+            width = width.bit_length() if width is not None else 1
+            try:
+                reset_val = getattr(initial_timings, reg)
+            except AttributeError:
+                reset_val = None
+            csr = CSRStorage(width, name=reg, reset=reset_val if reset_val is not None else 0)
+            assert reset_val is None or reset_val < 2**width, (reg, reset_val, 2**width)
+            setattr(self, reg, csr)
+
+        if phy_settings.training_capable:
+            self.phy_ctl = CSRStorage(
+                fields = [
+                    CSRField("init_req",  size=1, offset=0, reset=0, pulse=True,
+                                          description="Initiates PHY training"),
+                ],
+            )
+            self.phy_sts = CSRStatus(
+                fields = [
+                    CSRField("init_done", size=1, offset=0, reset=0,
+                                          description="Set to one upon PHY training completion"),
+                ],
+            )
 
 # ==============================================================================
 
@@ -43,7 +75,7 @@ class DRAMController(Module):
 
         # Registers ------------------------------------------------------------
 
-        self.registers = registers = LiteDRAMControllerRegisterBank(
+        self.registers = registers = DRAMControllerRegisterBank(
             phy_settings, timing_settings, max_expected_values,
             phy_settings.memtype)
         timing_regs = registers.get_register_signals()

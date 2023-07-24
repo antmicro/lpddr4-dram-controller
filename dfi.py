@@ -3,15 +3,12 @@
 # SPDX-License-Identifier: BSD-2-Clause
 
 from migen import *
-from migen.fhdl.structure import _Slice
 from migen.genlib.record import *
-from migen.genlib.cdc import PulseSynchronizer
 
-from litedram.phy.utils import Serializer, Deserializer
-from litedram.phy.dfi import *
+from litedram.phy.dfi import phase_description, Interface
 
 
-class Interface(litedram.phy.dfi.Interface):
+class Interface(Interface):
     def __init__(self, addressbits, bankbits, nranks, databits, nphases=1, with_sub_channels=False):
         self.with_sub_channels = with_sub_channels
         self.databits = databits
