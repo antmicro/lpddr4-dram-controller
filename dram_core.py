@@ -11,6 +11,7 @@ from common import *
 from multiplexer import Multiplexer
 from dfi_injector import DFIInjector
 from dram_crossbar import DRAMCrossbar
+from refresher import Refresher
 
 from litedram.core.controller import ControllerSettings, \
     LiteDRAMControllerRegisterBank, REGISTER_NAMES
@@ -98,7 +99,7 @@ class DRAMController(Module):
         # # #
 
         # Refresher ------------------------------------------------------------
-        self.submodules.refresher = self.settings.refresh_cls(self.settings,
+        self.submodules.refresher = Refresher(self.settings,
             clk_freq    = clk_freq,
             timing_regs = timing_regs,
             zqcs_freq   = self.settings.refresh_zqcs_freq,
