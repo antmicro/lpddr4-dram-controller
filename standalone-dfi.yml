@@ -7,10 +7,13 @@
 
     # SDRAM --------------------------------------------------------------------
     "memtype":          "DDR3",        # DRAM type
-    "sdram_module":     "MT41K64M16",  # SDRAM modules of the board or SO-DIMM
+    "sdram_module":     "DDR3Module",  # SDRAM modules of the board or SO-DIMM
     "sdram_data_nb":    16,            # Number of data bits
     "sdram_module_nb":  2,             # Number of byte groups
     "sdram_rank_nb":    1,             # Number of ranks
+    "sdram_ratio":      2,
+    "sdram_rows":       8192,
+    "sdram_cols":       1024,
 
     # DFI ----------------------------------------------------------------------
     # Override DFI address and bank widths

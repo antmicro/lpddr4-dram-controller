@@ -28,11 +28,13 @@ class DRAMControllerRegisterBank(LiteDRAMControllerRegisterBank):
                 width = getattr(max_expected_values, reg)
             except AttributeError:
                 width = None
-            width = width.bit_length() if width is not None else 1
-            try:
-                reset_val = getattr(initial_timings, reg)
-            except AttributeError:
-                reset_val = None
+            width = (width.bit_length() + 1) if width is not None else 1
+            reset_val = None
+            if initial_timings is not None:
+                try:
+                    reset_val = getattr(initial_timings, reg)
+                except AttributeError:
+                    reset_val = None
             csr = CSRStorage(width, name=reg, reset=reset_val if reset_val is not None else 0)
             assert reset_val is None or reset_val < 2**width, (reg, reset_val, 2**width)
             setattr(self, reg, csr)

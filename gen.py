@@ -238,7 +238,15 @@ class DRAMCoreSoC(LiteXSoC):
 
         # DRAM Interface ---------------------------------------------------------------------------
 
-        sdram_module = core_config["sdram_module"](sys_clk_freq, rate=rate)
+        sdram_module_def = core_config["sdram_module"]
+        timing_settings = True
+        if sdram_module_def.__name__.endswith("Module"):
+            timing_settings = False
+            setattr(sdram_module_def, "nbanks", 2**core_config.get("dfi_bankbits", 2))
+            setattr(sdram_module_def, "nrows", core_config.get("sdram_rows", 8192))
+            setattr(sdram_module_def, "ncols", core_config.get("sdram_cols", 1024))
+            setattr(sdram_module_def, "timing_settings", None)
+        sdram_module = sdram_module_def(sys_clk_freq, rate=rate, timing_settings=timing_settings)
 
         # Collect Electrical Settings.
         electrical_settings_kwargs = {}
