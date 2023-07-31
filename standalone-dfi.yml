@@ -15,6 +15,8 @@
     "sdram_rows":       8192,
     "sdram_cols":       1024,
 
+    "refresh_zqcs_freq":    10.0,      # ZQCS command frequency [Hz]
+
     # DFI ----------------------------------------------------------------------
     # Override DFI address and bank widths
     "dfi_nphases":      1,
