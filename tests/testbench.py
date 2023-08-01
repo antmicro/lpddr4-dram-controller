@@ -57,6 +57,16 @@ class BusReadItem(uvm_sequence_item):
         self.addr = addr
         self.data = data
 
+class BusRandomReadItem(uvm_sequence_item):
+    def __init__(self, addr_range):
+        super().__init__("bus_random_read_item")
+        self.addr_range = addr_range
+        self.addr = None
+        self.data = None
+
+    def randomize(self):
+        self.addr = random.randint(*self.addr_range) & ~0x3
+
 class WaitItem(uvm_sequence_item):
     """
     A generic wait item. Used to instruct a driver to wait N cycles
@@ -204,7 +214,7 @@ class WishboneDriver(uvm_driver):
 
             if isinstance(it, BusWriteItem) or isinstance(it, BusRandomWriteItem):
                 await self.iface.write(it.addr, it.data)
-            elif isinstance(it, BusReadItem):
+            elif isinstance(it, BusReadItem) or isinstance(it, BusRandomReadItem):
                 it.data = await self.iface.read(it.addr)
             elif isinstance(it, WaitItem):
                 for i in range(it.cycles):
@@ -267,42 +277,23 @@ class DFIInterface:
         obj = getattr(uut, clk)
         setattr(self, "dfi_clk", obj)
 
-        # Internals
-        self.is_trained = False
-
-    async def training(self):
+    async def read(self, data):
         """
-        An independent task responsible for handling training requests
+        Feeds data to the DFI read interface
         """
 
-        while True:
+        self.dfi_rddata.value       = data
+        self.dfi_rddata_valid.value = 1
 
-            # Wait for clock
-            await RisingEdge(self.dfi_clk)
+        await RisingEdge(self.dfi_clk)
 
-            # Init request
-            if self.dfi_init_start.value == 1 and not self.is_trained:
-
-                # Wait n cycles
-                for i in range(100): # FIXME: Arbitrary training delay
-                    await RisingEdge(self.dfi_clk)
-
-                # Pulse init_complete
-                self.dfi_init_complete.value = 1
-                await RisingEdge(self.dfi_clk)
-                self.dfi_init_complete.value = 0
-
-                # Trained
-                self.is_trained = True
-
-    async def read(self):
-        pass
+        self.dfi_rddata_valid.value = 0
 
 
-class DFIDriver(uvm_driver):
+class DFIResponder(uvm_component):
     """
-    Driver for the DFI interface. Responsible for handling DRAM read transfers
-    where data must be injected into DFI.
+    DFI training request responder. Attatches itself to the training request /
+    response port and simulates PHY training
     """
 
     def __init__(self, *args, **kwargs):
@@ -310,7 +301,55 @@ class DFIDriver(uvm_driver):
         del kwargs["iface"]
         super().__init__(*args, **kwargs)
 
-    # TODO: Implement run_phase() for DFI read tests
+        # Internals
+        self.is_trained = False
+
+    async def run(self):
+
+        while True:
+
+            # Wait for clock
+            await RisingEdge(self.iface.dfi_clk)
+
+            # Init request
+            if self.iface.dfi_init_start.value == 1 and not self.is_trained:
+
+                # Wait n cycles
+                for i in range(100): # FIXME: Arbitrary training delay
+                    await RisingEdge(self.iface.dfi_clk)
+
+                # Pulse init_complete
+                self.iface.dfi_init_complete.value = 1
+                await RisingEdge(self.iface.dfi_clk)
+                self.iface.dfi_init_complete.value = 0
+
+                # Trained
+                self.is_trained = True
+
+    def start(self):
+        cocotb.start_soon(self.run())
+
+
+class DFIDriver(uvm_driver):
+    """
+    Driver for the DFI interface. Responsible for handling DRAM read
+    transfers where data must be injected into DFI.
+    """
+
+    def __init__(self, *args, **kwargs):
+        self.iface = kwargs["iface"]
+        del kwargs["iface"]
+        super().__init__(*args, **kwargs)
+
+    async def run_phase(self):
+        while True:
+            it = await self.seq_item_port.get_next_item()
+            assert isinstance(it, DRAMReadItem)
+
+            # Pass the data to DFI
+            await self.iface.read(it.data)
+
+            self.seq_item_port.item_done()
 
 # =============================================================================
 
@@ -368,6 +407,7 @@ class DFIMonitor(uvm_component):
 
     def build_phase(self):
         self.ap = uvm_analysis_port("ap", self)
+        self.rp = uvm_seq_item_export("rp", self)
 
     async def run_phase(self):
         while True:
@@ -377,12 +417,20 @@ class DFIMonitor(uvm_component):
             res = await self.dram.tick()
 
             # If a read/write has been detected push it to the analysis port
+            # Push read requests to the read request port (rp)
             if res:
                 if res[0] == "WR":
                     self.ap.write(DRAMWriteItem(*res[1:]))
+
                 elif res[0] == "RD":
-                    pass # TODO
-                    #self.ap.write(DRAMReadItem(*res[1:]))
+                    self.ap.write(DRAMReadItem(*res[1:]))
+
+                    # FIXME: This is a bit hacky - the monitor mimics a
+                    # sequencer.
+                    item = DRAMReadItem(*res[1:])
+                    item.item_ready.set()
+                    await self.rp.put_req(item)
+
                 else:
                     assert False, "Unknown DFI operation '{}'".format(res)
 
@@ -511,12 +559,14 @@ class BaseEnv(uvm_env):
 
         # DFI
         iface = DFIInterface(cocotb.top, "clk", "dfi_")
-        self.dfi_driver = DFIDriver("dfi_drv", self, iface=iface)
-        self.dfi_mon    = DFIMonitor("dfi_mon", self, iface=iface)
+        self.dfi_responder  = DFIResponder("dfi_rsp", self, iface=iface)
+        self.dfi_driver     = DFIDriver("dfi_drv", self, iface=iface)
+        self.dfi_mon        = DFIMonitor("dfi_mon", self, iface=iface)
 
     def connect_phase(self):
         self.wb_ctrl_driver.seq_item_port.connect(self.wb_ctrl_seqr.seq_item_export)
         self.wb_data_driver.seq_item_port.connect(self.wb_data_seqr.seq_item_export)
+        self.dfi_driver.seq_item_port.connect(self.dfi_mon.rp)
 
 # =============================================================================
 
@@ -535,6 +585,8 @@ class BaseTest(uvm_test):
         db = ConfigDB()
         db.set(None, "*", "CSR_CSV",  os.environ.get("CSR_CSV", "csr.csv"))
         db.set(None, "*", "CLK_FREQ", 100.0)
+
+        db.set(None, "*", "CL",       3)
 
         db.set(None, "*", "tRP",      2)
         db.set(None, "*", "tRCD",     2)
@@ -572,11 +624,11 @@ class BaseTest(uvm_test):
         # Start the clock
         self.start_clock()
 
+        # Start DFI responder
+        self.env.dfi_responder.start()
+
         # Issue a reset pulse
         await self.do_reset()
-
-        # Start DFI training request handler
-        cocotb.start_soon(self.env.dfi_driver.iface.training())
 
         # Initialize the controller
         await self.init_seq.start(self.env.wb_ctrl_seqr)

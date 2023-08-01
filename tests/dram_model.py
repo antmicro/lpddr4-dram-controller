@@ -10,9 +10,11 @@ which ensures that command timings are met.
 """
 
 from collections import OrderedDict
+import random
 
 from pyuvm import ConfigDB
 import cocotb.utils
+from cocotb.triggers import RisingEdge
 
 # =============================================================================
 
@@ -234,13 +236,14 @@ class Model:
         # Get parameters
         self.clk_freq = float(ConfigDB().get(None, "", "CLK_FREQ"))
         self.timings  = Timings(None, "")
+        self.cl       = ConfigDB().get(None, "", "CL")
 
         # Create the timing checker
         self.timing_checker = TimingChecker(self.timings, self.clk_freq, self.logger)
 
         # TODO: Get DFI signal width
         self.banks  = {b: Bank() for b in range(1 << 3)}
-        self.writes = []
+        self.queue  = []
 
     async def tick(self):
         """
@@ -292,12 +295,21 @@ class Model:
                     self.logger.warning("Attempted to write to an inactive bank")
                     self.passed = False
 
-                self.writes.append(cmd)
+                self.queue.append(cmd)
 
-        # Handle DFI write
-        res = self.handle_dfi_write()
+            elif cmd.name == "RD":
+                bank = self.banks[cmd.args["bank"]]
+
+                if not bank.is_active:
+                    self.logger.warning("Attempted to read from an inactive bank")
+                    self.passed = False
+
+                self.queue.append(cmd)
+
+        # Handle DFI IO
+        res = await self.handle_dfi_io()
         if res:
-            return ("WR", *res)
+            return res
 
         return None
 
@@ -355,40 +367,77 @@ class Model:
 
         return cmd
 
-    def handle_dfi_write(self):
+    async def handle_dfi_io(self):
         """
-        Handles DFI data writes. Upon a successful write detection returns its
-        DRAM address, data and mask
+        Handles DFI data operations. Upon a successful write detection returns
+        its DRAM address, data and mask
         """
-
-        if not self.iface.dfi_wrdata_en.value:
-            return None
-
-        data = self.iface.dfi_wrdata.value
-        mask = self.iface.dfi_wrdata_mask.value
-
-        # Check and pop write command
-        if not len(self.writes) or self.writes[0].name != "WR":
-            self.logger.error("DFI write without pending DRAM write command")
-            self.passed = False
-            return None
-
-        cmd = self.writes[0]
-        self.writes = self.writes[1:]
-
-        # Check if the bank is active
-        bank = self.banks[cmd.args["bank"]]
-
-        if not bank.is_active:
-            self.logger.error("DFI write to an inactive bank")
-            return
 
         # Write
-        self.logger.info("{} row=0x{:04X} data=0x{:08X} mask=0x{:02X}".format(
-            cmd,
-            bank.row,
-            data.integer,
-            mask.integer
-        ))
+        if self.iface.dfi_wrdata_en.value:
 
-        return (cmd.args["bank"], bank.row, cmd.args["col"], data, mask,)
+            data = self.iface.dfi_wrdata.value
+            mask = self.iface.dfi_wrdata_mask.value
+
+            # Check and pop write command
+            if not len(self.queue) or self.queue[0].name != "WR":
+                self.logger.error("DFI write without pending DRAM write command")
+                self.passed = False
+                return None
+
+            cmd = self.queue[0]
+            self.queue = self.queue[1:]
+
+            # Check if the bank is active
+            bank = self.banks[cmd.args["bank"]]
+
+            if not bank.is_active:
+                self.logger.error("DFI write to an inactive bank")
+                return None
+
+            # Write
+            self.logger.info("{} row=0x{:04X} data=0x{:08X} mask=0x{:02X}".format(
+                cmd,
+                bank.row,
+                data.integer,
+                mask.integer
+            ))
+
+            return ("WR", cmd.args["bank"], bank.row, cmd.args["col"], data, mask,)
+
+        # Read
+        if self.iface.dfi_rddata_en.value:
+
+            # Check and pop read command
+            if not len(self.queue) or self.queue[0].name != "RD":
+                self.logger.error("DFI read without pending DRAM write command")
+                self.passed = False
+                return None
+
+            cmd = self.queue[0]
+            self.queue = self.queue[1:]
+
+            # Check if the bank is active
+            bank = self.banks[cmd.args["bank"]]
+
+            if not bank.is_active:
+                self.logger.error("DFI read from an inactive bank")
+                return None
+
+            # Randomize data
+            top  = (1 << self.iface.dfi_rddata.value.n_bits) - 1
+            data = random.randint(0, top)
+
+            # READ
+            self.logger.info("{} row=0x{:04X} data=0x{:08X}".format(
+                cmd,
+                bank.row,
+                data,
+            ))
+
+            # Enforce CL
+            for i in range(self.cl):
+                await RisingEdge(self.iface.dfi_clk)
+
+            return ("RD", cmd.args["bank"], bank.row, cmd.args["col"], data,)
+
