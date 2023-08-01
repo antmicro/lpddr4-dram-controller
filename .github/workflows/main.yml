@@ -1,0 +1,44 @@
+name: Generate DRAM Controller RTL
+on:
+  push
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  generate:
+    runs-on: ubuntu-22.04
+
+    env:
+      GIT_SUBMODULE_STRATEGY: "recursive"
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+        with:
+          submodules: recursive
+
+      - name: Install system dependencies
+        run: |
+          sudo apt -qqy update
+          sudo apt -qqy install --no-install-recommends git python3 python3-pip python3-venv nodejs
+
+      - name: Prepare Python venv and install dependencies
+        run: |
+          python3 -m venv env
+          source ./env/bin/activate
+          pip install -r requirements.txt
+          pip freeze
+
+      - name: Generate DRAM controller RTL
+        run: |
+          source ./env/bin/activate
+          make verilog
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: dram-controller
+          path: |
+            build/*
