@@ -15,6 +15,7 @@ import random
 from pyuvm import ConfigDB
 import cocotb.utils
 from cocotb.triggers import RisingEdge
+from cocotb.binary import BinaryValue
 
 # =============================================================================
 
@@ -426,13 +427,13 @@ class Model:
 
             # Randomize data
             top  = (1 << self.iface.dfi_rddata.value.n_bits) - 1
-            data = random.randint(0, top)
+            data = BinaryValue(random.randint(0, top), self.iface.dfi_rddata.value.n_bits)
 
             # READ
             self.logger.info("{} row=0x{:04X} data=0x{:08X}".format(
                 cmd,
                 bank.row,
-                data,
+                int(data),
             ))
 
             # Enforce CL

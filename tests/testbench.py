@@ -387,7 +387,7 @@ class WishboneMonitor(uvm_component):
 
                     # Read
                     else:
-                        data = self.iface.wb_dat_w.value
+                        data = self.iface.wb_dat_r.value
                         self.logger.info("read  0x{:08X} -> 0x{:08X}".format(addr, int(data)))
                         self.ap.write(BusReadItem(addr, data))
 
