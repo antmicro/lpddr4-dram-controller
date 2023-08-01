@@ -364,8 +364,8 @@ class Model:
         if not self.iface.dfi_wrdata_en.value:
             return None
 
-        data = int(self.iface.dfi_wrdata)
-        mask = int(self.iface.dfi_wrdata_mask)
+        data = self.iface.dfi_wrdata.value
+        mask = self.iface.dfi_wrdata_mask.value
 
         # Check and pop write command
         if not len(self.writes) or self.writes[0].name != "WR":
@@ -387,8 +387,8 @@ class Model:
         self.logger.info("{} row=0x{:04X} data=0x{:08X} mask=0x{:02X}".format(
             cmd,
             bank.row,
-            data,
-            mask
+            data.integer,
+            mask.integer
         ))
 
         return (cmd.args["bank"], bank.row, cmd.args["col"], data, mask,)

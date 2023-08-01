@@ -146,18 +146,62 @@ class WriteScoreboard(uvm_component):
 
             if not got_dfi:
                 self.logger.critical("No DFI read/write for for DRAM command")
-                passed = False
+                self.passed = False
                 continue
 
+            # Check items
+            check = True
+
+            if bus_item.data.n_bits not in [32]:
+                self.logger.critical("Unsupported bus data width {}",
+                    bus_item.data.n_bits
+                )
+                check = False
+
+            if dfi_item.data.n_bits not in [32, 64]:
+                self.logger.critical("Unsupported DFI data width {}",
+                    dfi_item.data.n_bits
+                )
+                check = False
+
+            ratio = dfi_item.data.n_bits / bus_item.data.n_bits
+            if ratio  not in [1.0, 2.0, 4.0]:
+                self.logger.critical("Unsupported bus to DFI data ratio")
+                check = False
+
             # Get data word being written
-            if dfi_item.mask == 0x0F:
-                nibble = 1
-            elif dfi_item.mask == 0xF0:
-                nibble = 0
+            if dfi_item.data.n_bits == 64:
+                if dfi_item.mask == 0x0F:
+                    word = 1
+                elif dfi_item.mask == 0xF0:
+                    word = 0
+                else:
+                    # TODO: Its not strictly invalid but shouldn't happen.
+                    self.logger.critical(
+                        "Invalid DFI data mask 0x{:02X}".format(
+                            dfi_item.mask.integer
+                        )
+                    )
+                    check = False
+
+            elif dfi_item.data.n_bits == 32:
+                if dfi_item.mask == 0x0:
+                    word = 0
+                else:
+                    # TODO: Its not strictly invalid but shouldn't happen.
+                    self.logger.critical(
+                        "Invalid DFI data mask 0x{:01X}".format(
+                            dfi_item.mask.integer
+                        )
+                    )
+                    check = False
+
             else:
-                # TODO: Its not strictly invalid but shouldn't happen in this
-                # controller configuration/
-                self.logger.critical("Invalid DFI data mask 0x{:02X}".format(dfi_item.mask))
+                # Shouldn't happen
+                assert False
+
+            # Failure
+            if not check:
                 self.passed = False
                 continue
 
@@ -175,26 +219,25 @@ class WriteScoreboard(uvm_component):
             col  = dfi_item.col  & col_mask
             bank = dfi_item.bank & bank_mask
 
-            dram_addr = (((row  << (1 + col_nb + bank_nb)) | \
-                          (bank << (1 + col_nb)) | \
-                          (col  << (1))) >> 3) | \
-                           nibble
-
-            dram_data = (dfi_item.data >> (32 * nibble)) & 0xFFFFFFFF
+            dram_addr  = ((row  << (col_nb + bank_nb)) | \
+                          (bank << (col_nb)) | col) >> \
+                          (3 - (int)(ratio - 1))
+            dram_addr |= word
+            dram_data  = (dfi_item.data >> (32 * word)) & 0xFFFFFFFF
 
             msg = "bus={:08X}:{:08X} vs. dfi={:08X}:{:08X}, bank={} row=0x{:04X} col=0x:{:04X} mask=0x{:02X}".format(
                 bus_item.addr,
-                bus_item.data,
+                int(bus_item.data),
                 dram_addr,
                 dram_data,
                 dfi_item.bank,
                 dfi_item.row,
                 dfi_item.col,
-                dfi_item.mask,
+                int(dfi_item.mask),
             )
 
             # Check
-            if dram_addr == bus_item.addr and dram_data == bus_item.data:
+            if dram_addr == bus_item.addr and dram_data == int(bus_item.data):
                 self.logger.debug(msg)
             else:
                 self.logger.error(msg)

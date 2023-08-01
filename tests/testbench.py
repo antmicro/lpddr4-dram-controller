@@ -29,7 +29,7 @@ class BusWriteItem(uvm_sequence_item):
     A generic data bus write request / response
     """
     def __init__(self, addr, data):
-        super().__init__("{:08X}:{:08X}".format(addr, data))
+        super().__init__("{:08X}:{:08X}".format(addr, int(data)))
         self.addr = addr
         self.data = data
 
@@ -71,7 +71,7 @@ class DRAMWriteItem(uvm_sequence_item):
     """
     def __init__(self, bank, row, col, data, mask):
         super().__init__("WR:{:02X}_{:04X}_{:03X}_{:016X}_{:02X}".format(
-            bank, row, col, data, mask)
+            bank, row, col, int(data), int(mask))
         )
         self.bank = bank
         self.row  = row
@@ -342,14 +342,14 @@ class WishboneMonitor(uvm_component):
 
                     # Write
                     if self.iface.wb_we.value:
-                        data = int(self.iface.wb_dat_w.value)
-                        self.logger.info("write 0x{:08X} <- 0x{:08X}".format(addr, data))
+                        data = self.iface.wb_dat_w.value
+                        self.logger.info("write 0x{:08X} <- 0x{:08X}".format(addr, int(data)))
                         self.ap.write(BusWriteItem(addr, data))
 
                     # Read
                     else:
-                        data = int(self.iface.wb_dat_w.value)
-                        self.logger.info("read  0x{:08X} -> 0x{:08X}".format(addr, data))
+                        data = self.iface.wb_dat_w.value
+                        self.logger.info("read  0x{:08X} -> 0x{:08X}".format(addr, int(data)))
                         self.ap.write(BusReadItem(addr, data))
 
 
