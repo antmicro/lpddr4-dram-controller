@@ -6,7 +6,7 @@ from pyuvm import *
 from testbench import BusRandomReadItem, WaitItem
 from testbench import BaseEnv, BaseTest
 
-from dfi_scoreboard import DFIScoreboard
+from dfi_scoreboard import ReadScoreboard
 
 # =============================================================================
 
@@ -37,49 +37,69 @@ class RandomReadSeq(uvm_sequence):
             await self.finish_item(item)
 
 
-# =============================================================================
+class SequentialReadSeq(uvm_sequence):
 
-class ReadScoreboard(DFIScoreboard):
+    def __init__(self, name):
+        super().__init__(name)
+        self.cfg = {
+            "address":  0x00000000,
+            "step":     4,
+            "count":    1024,
+        }
 
-    def check_phase(self):
+    def configure(self, cfg):
+        self.cfg.update(cfg)
 
-        while self.bus_port.can_get():
+    async def body(self):
 
-            # Get items
-            got_bus, bus_item = self.bus_port.try_get()
-            got_dfi, dfi_item = self.dfi_port.try_get()
+        # Sequential read burst
+        for i in range(self.cfg["count"]):
+            addr = self.cfg["address"] + i * self.cfg["step"]
+            item = BusRandomReadItem((addr, addr))
+            await self.start_item(item)
+            item.randomize()
+            await self.finish_item(item)
 
-            if not got_dfi:
-                self.logger.critical("No DFI read/write for for DRAM command")
-                self.passed = False
-                continue
 
-            # Check items
-            # FIXME: Support bus to DFI width ratio
-            if bus_item.data.n_bits != dfi_item.data.n_bits:
-                self.logger.critical("Bus data width must be equal to DFI data width")
-                self.passed = False
-                continue
+class BurstReadSeq(uvm_sequence):
 
-            # Build DRAM address
-            dram_addr = self.decode_dram_address(dfi_item) >> 3
+    def __init__(self, name):
+        super().__init__(name)
+        self.cfg = {
+            "min_address":  0x00000000,
+            "max_address":  0x00FFFFFC,
+            "burst_length": 128,
+            "burst_count":  10,
+            "burst_gap":    500, # (cycles)
+        }
 
-            # Check
-            msg = "bus={:08X}:{:08X} vs. dfi={:08X}:{:08X}, bank={} row=0x{:04X} col=0x:{:04X}".format(
-                bus_item.addr,
-                int(bus_item.data),
-                dram_addr,
-                int(dfi_item.data),
-                dfi_item.bank,
-                dfi_item.row,
-                dfi_item.col
-            )
+    def configure(self, cfg):
+        self.cfg.update(cfg)
 
-            if dram_addr == bus_item.addr and int(dfi_item.data) == int(bus_item.data):
-                self.logger.debug(msg)
-            else:
-                self.logger.error(msg)
-                self.passed = False
+    async def body(self):
+
+        seqr = ConfigDB().get(None, "", "SEQR")
+
+        # Bursts
+        for j in range(self.cfg["burst_count"]):
+
+            # Randomize burst starting address
+            min_address = self.cfg["min_address"]
+            max_address = self.cfg["max_address"] - 4 * self.cfg["burst_length"]
+            base_addr   = random.randint(min_address, max_address) & ~0x3
+
+            # Execute the burst
+            seq = SequentialReadSeq("random")
+            seq.configure({
+                "address":  base_addr,
+                "count":    self.cfg["burst_length"],
+            })
+            await seq.start(seqr)
+
+            # Wait
+            item = WaitItem(self.cfg["burst_gap"])
+            await self.start_item(item)
+            await self.finish_item(item)
 
 # =============================================================================
 
@@ -123,3 +143,38 @@ class TestRandomRead(BaseTest):
 
     async def run(self):
         await self.seq.start(self.env.wb_data_seqr)
+
+
+@pyuvm.test()
+class TestSequentialRead(BaseTest):
+    """
+    Performs a single sequential memory read
+    """
+
+    def __init__(self, name, parent):
+        super().__init__(name, parent, TestReadEnv)
+
+    def end_of_elaboration_phase(self):
+        super().end_of_elaboration_phase()
+        self.seq = SequentialReadSeq.create("read")
+
+    async def run(self):
+        await self.seq.start(self.env.wb_data_seqr)
+
+
+@pyuvm.test()
+class TestBurstRead(BaseTest):
+    """
+    Performs a sequence of random memory sequentual read bursts
+    """
+
+    def __init__(self, name, parent):
+        super().__init__(name, parent, TestReadEnv)
+
+    def end_of_elaboration_phase(self):
+        super().end_of_elaboration_phase()
+        self.seq = BurstReadSeq.create("read")
+
+    async def run(self):
+        await self.seq.start(self.env.wb_data_seqr)
+

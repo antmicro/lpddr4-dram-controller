@@ -3,6 +3,10 @@ from pyuvm import *
 # =============================================================================
 
 class DFIScoreboard(uvm_component):
+    """
+    Base DFI scoreboard class. Provides common functionality for
+    WriteScoreboard and ReadScoreboard.
+    """
 
     def __init__(self, name, parent):
         super().__init__(name, parent)
@@ -45,3 +49,155 @@ class DFIScoreboard(uvm_component):
         if not self.passed:
             self.logger.critical("{} reports a failure".format(type(self)))
             assert False
+
+
+# =============================================================================
+
+class WriteScoreboard(DFIScoreboard):
+    """
+    Scoreboard for DRAM write test. Analyzes Wishbone write requests and DFI
+    activity. Predicts (computes) DRAM addresses and checks if data written
+    through Wishbone matches data written to DRAM
+    """
+
+    def check_phase(self):
+
+        while self.bus_port.can_get():
+
+            # Get items
+            got_bus, bus_item = self.bus_port.try_get()
+            got_dfi, dfi_item = self.dfi_port.try_get()
+
+            if not got_dfi:
+                self.logger.critical("No DFI read/write for for DRAM command")
+                self.passed = False
+                continue
+
+            # Check items
+            check = True
+
+            if bus_item.data.n_bits not in [32]:
+                self.logger.critical("Unsupported bus data width {}",
+                    bus_item.data.n_bits
+                )
+                check = False
+
+            if dfi_item.data.n_bits not in [32, 64]:
+                self.logger.critical("Unsupported DFI data width {}",
+                    dfi_item.data.n_bits
+                )
+                check = False
+
+            ratio = dfi_item.data.n_bits / bus_item.data.n_bits
+            if ratio  not in [1.0, 2.0, 4.0]:
+                self.logger.critical("Unsupported bus to DFI data ratio")
+                check = False
+
+            # Get data word being written
+            if dfi_item.data.n_bits == 64:
+                if dfi_item.mask == 0x0F:
+                    word = 1
+                elif dfi_item.mask == 0xF0:
+                    word = 0
+                else:
+                    # TODO: Its not strictly invalid but shouldn't happen.
+                    self.logger.critical(
+                        "Invalid DFI data mask 0x{:02X}".format(
+                            dfi_item.mask.integer
+                        )
+                    )
+                    check = False
+
+            elif dfi_item.data.n_bits == 32:
+                if dfi_item.mask == 0x0:
+                    word = 0
+                else:
+                    # TODO: Its not strictly invalid but shouldn't happen.
+                    self.logger.critical(
+                        "Invalid DFI data mask 0x{:01X}".format(
+                            dfi_item.mask.integer
+                        )
+                    )
+                    check = False
+
+            else:
+                # Shouldn't happen
+                assert False
+
+            # Failure
+            if not check:
+                self.passed = False
+                continue
+
+            # Build DRAM address
+            dram_addr  = self.decode_dram_address(dfi_item) >> (3 - (int)(ratio - 1))
+            dram_addr |= word
+            dram_data  = (dfi_item.data >> (32 * word)) & 0xFFFFFFFF
+
+            msg = "bus={:08X}:{:08X} vs. dfi={:08X}:{:08X}, bank={} row=0x{:04X} col=0x:{:04X} mask=0x{:02X}".format(
+                bus_item.addr,
+                int(bus_item.data),
+                dram_addr,
+                dram_data,
+                dfi_item.bank,
+                dfi_item.row,
+                dfi_item.col,
+                int(dfi_item.mask),
+            )
+
+            # Check
+            if dram_addr == bus_item.addr and dram_data == int(bus_item.data):
+                self.logger.debug(msg)
+            else:
+                self.logger.error(msg)
+                self.passed = False
+
+
+# =============================================================================
+
+class ReadScoreboard(DFIScoreboard):
+    """
+    Scoreboard for DRAM read test. Analyzes Wishbone read requests and DFI
+    activity. Predicts (computes) DRAM addresses and checks if data read
+    through Wishbone matches data read from DRAM.
+    """
+
+    def check_phase(self):
+
+        while self.bus_port.can_get():
+
+            # Get items
+            got_bus, bus_item = self.bus_port.try_get()
+            got_dfi, dfi_item = self.dfi_port.try_get()
+
+            if not got_dfi:
+                self.logger.critical("No DFI read/write for for DRAM command")
+                self.passed = False
+                continue
+
+            # Check items
+            # FIXME: Support bus to DFI width ratio
+            if bus_item.data.n_bits != dfi_item.data.n_bits:
+                self.logger.critical("Bus data width must be equal to DFI data width")
+                self.passed = False
+                continue
+
+            # Build DRAM address
+            dram_addr = self.decode_dram_address(dfi_item) >> 3
+
+            # Check
+            msg = "bus={:08X}:{:08X} vs. dfi={:08X}:{:08X}, bank={} row=0x{:04X} col=0x:{:04X}".format(
+                bus_item.addr,
+                int(bus_item.data),
+                dram_addr,
+                int(dfi_item.data),
+                dfi_item.bank,
+                dfi_item.row,
+                dfi_item.col
+            )
+
+            if dram_addr == bus_item.addr and int(dfi_item.data) == int(bus_item.data):
+                self.logger.debug(msg)
+            else:
+                self.logger.error(msg)
+                self.passed = False
