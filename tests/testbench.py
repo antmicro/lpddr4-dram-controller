@@ -33,6 +33,9 @@ class BusWriteItem(uvm_sequence_item):
         self.addr = addr
         self.data = data
 
+    def randomize(self):
+        pass
+
 class BusRandomWriteItem(uvm_sequence_item):
     """
     A randomized data bus write request / response. Randomizes data and
@@ -57,6 +60,9 @@ class BusReadItem(uvm_sequence_item):
         self.addr = addr
         self.data = data
 
+    def randomize(self):
+        pass
+
 class BusRandomReadItem(uvm_sequence_item):
     def __init__(self, addr_range):
         super().__init__("bus_random_read_item")
@@ -74,6 +80,9 @@ class WaitItem(uvm_sequence_item):
     def __init__(self, cycles):
         super().__init__("@{}".format(cycles))
         self.cycles = cycles
+
+    def randomize(self):
+        pass
 
 class DRAMWriteItem(uvm_sequence_item):
     """
@@ -403,7 +412,8 @@ class DFIMonitor(uvm_component):
         super().__init__(*args, **kwargs)
 
         # Instantiate a PHY+DRAM model
-        self.dram = dram.Model(self.iface, self.logger)
+        storage = ConfigDB().get(self, "", "DRAM_STORAGE") != 0
+        self.dram = dram.Model(self.iface, self.logger, with_storage=storage)
 
     def build_phase(self):
         self.ap = uvm_analysis_port("ap", self)
@@ -580,8 +590,6 @@ class BaseTest(uvm_test):
         super().__init__(name, parent)
         self.env_class = env_class
 
-    def build_phase(self):
-
         db = ConfigDB()
         db.set(None, "*", "CSR_CSV",  os.environ.get("CSR_CSV", "csr.csv"))
         db.set(None, "*", "CLK_FREQ", 100.0)
@@ -601,6 +609,10 @@ class BaseTest(uvm_test):
         db.set(None, "*", "tRAS",     4)
         db.set(None, "*", "tZQCS",    16)
 
+        # Disable DRAM storage simulation by default
+        ConfigDB().set(None, "*", "DRAM_STORAGE", False);
+
+    def build_phase(self):
         self.env = self.env_class("env", self)
 
     def end_of_elaboration_phase(self):

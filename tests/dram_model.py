@@ -229,10 +229,13 @@ class Model:
         (1, 1, 0): "ZQC",
     }
 
-    def __init__(self, iface, logger):
+    def __init__(self, iface, logger, with_storage=False):
         self.iface  = iface
         self.logger = logger
         self.passed = True
+
+        self.with_storage = with_storage
+        self.storage = dict()
 
         # Get parameters
         self.clk_freq = float(ConfigDB().get(None, "", "CLK_FREQ"))
@@ -404,6 +407,14 @@ class Model:
                 mask.integer
             ))
 
+            # Store data
+            if self.with_storage:
+                for i in range(data.n_bits // 8):
+                    if mask[i].value == 0:
+                        key = (bank.row, cmd.args["bank"], cmd.args["col"], i)
+                        dat = (data >> (8 * i)) & 0xFF
+                        self.storage[key] = dat
+
             return ("WR", cmd.args["bank"], bank.row, cmd.args["col"], data, mask,)
 
         # Read
@@ -425,9 +436,35 @@ class Model:
                 self.logger.error("DFI read from an inactive bank")
                 return None
 
+            # FIXME: This is a workaround for a yet to be determined
+            # cocotb bug
+            def make_binary_value(x, n_bits):
+                value = BinaryValue(n_bits = n_bits)
+                fmt = "{{:0{}b}}".format(n_bits)
+                value._str = fmt.format(x)
+                value._adjust()
+                return value
+
+            # Restore data
+            if self.with_storage:
+                data = 0
+                for i in range(self.iface.dfi_rddata.value.n_bits // 8):
+                    key = (bank.row, cmd.args["bank"], cmd.args["col"], i)
+                    dat = self.storage.get(key, 0x00)
+                    data |= (dat << (8 * i))
+
+                data = make_binary_value(
+                    data,
+                    self.iface.dfi_rddata.value.n_bits
+                )
+
             # Randomize data
-            top  = (1 << self.iface.dfi_rddata.value.n_bits) - 1
-            data = BinaryValue(random.randint(0, top), self.iface.dfi_rddata.value.n_bits)
+            else:
+                top  = (1 << self.iface.dfi_rddata.value.n_bits) - 1
+                data = make_binary_value(
+                    random.randint(0, top),
+                    self.iface.dfi_rddata.value.n_bits
+                )
 
             # READ
             self.logger.info("{} row=0x{:04X} data=0x{:08X}".format(

@@ -1,5 +1,8 @@
 from pyuvm import *
 
+from testbench import BusReadItem, BusRandomReadItem, DRAMReadItem
+from testbench import BusWriteItem, BusRandomWriteItem, DRAMWriteItem
+
 # =============================================================================
 
 class DFIScoreboard(uvm_component):
@@ -71,6 +74,15 @@ class WriteScoreboard(DFIScoreboard):
             if not got_dfi:
                 self.logger.critical("No DFI read/write for for DRAM command")
                 self.passed = False
+                continue
+
+            # Discard if both items are not write
+            if not isinstance(bus_item, BusWriteItem):
+                continue
+            if not isinstance(bus_item, BusRandomWriteItem):
+                continue
+
+            if not isinstance(dfi_item, DRAMWriteItem):
                 continue
 
             # Check items
@@ -173,6 +185,15 @@ class ReadScoreboard(DFIScoreboard):
             if not got_dfi:
                 self.logger.critical("No DFI read/write for for DRAM command")
                 self.passed = False
+                continue
+
+            # Discard if both items are not read
+            if not isinstance(bus_item, BusReadItem):
+                continue
+            if not isinstance(bus_item, BusRandomReadItem):
+                continue
+
+            if not isinstance(dfi_item, DRAMReadItem):
                 continue
 
             # Check items
