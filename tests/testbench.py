@@ -391,13 +391,13 @@ class WishboneMonitor(uvm_component):
                     # Write
                     if self.iface.wb_we.value:
                         data = self.iface.wb_dat_w.value
-                        self.logger.info("write 0x{:08X} <- 0x{:08X}".format(addr, int(data)))
+                        self.logger.debug("write 0x{:08X} <- 0x{:08X}".format(addr, int(data)))
                         self.ap.write(BusWriteItem(addr, data))
 
                     # Read
                     else:
                         data = self.iface.wb_dat_r.value
-                        self.logger.info("read  0x{:08X} -> 0x{:08X}".format(addr, int(data)))
+                        self.logger.debug("read  0x{:08X} -> 0x{:08X}".format(addr, int(data)))
                         self.ap.write(BusReadItem(addr, data))
 
 
@@ -589,6 +589,11 @@ class BaseTest(uvm_test):
     def __init__(self, name, parent, env_class=BaseEnv):
         super().__init__(name, parent)
         self.env_class = env_class
+
+        # Syncrhonize pyuvm logging level with cocotb logging level. Unclear
+        # why it does not happen automatically.
+        level = logging.getLevelName(os.environ.get("COCOTB_LOG_LEVEL", "INFO"))
+        uvm_report_object.set_default_logging_level(level)
 
         db = ConfigDB()
         db.set(None, "*", "CSR_CSV",  os.environ.get("CSR_CSV", "csr.csv"))

@@ -169,7 +169,7 @@ class TimingChecker:
         Outputs the list of timing tules through the logger
         """
         for rule in self.rules:
-            self.logger.info(str(rule))
+            self.logger.debug(str(rule))
 
     def check_command(self, cmd):
         """
@@ -264,7 +264,7 @@ class Model:
 
             # Debug
             if cmd.name != "NOP":
-                self.logger.info(str(cmd))
+                self.logger.debug(str(cmd))
 
             # Check timing violations
             if cmd.name != "NOP":
@@ -400,7 +400,7 @@ class Model:
                 return None
 
             # Write
-            self.logger.info("{} row=0x{:04X} data=0x{:08X} mask=0x{:02X}".format(
+            self.logger.debug("{} row=0x{:04X} data=0x{:08X} mask=0x{:02X}".format(
                 cmd,
                 bank.row,
                 data.integer,
@@ -467,7 +467,7 @@ class Model:
                 )
 
             # READ
-            self.logger.info("{} row=0x{:04X} data=0x{:08X}".format(
+            self.logger.debug("{} row=0x{:04X} data=0x{:08X}".format(
                 cmd,
                 bank.row,
                 int(data),

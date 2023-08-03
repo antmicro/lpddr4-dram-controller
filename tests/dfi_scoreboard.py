@@ -65,6 +65,9 @@ class WriteScoreboard(DFIScoreboard):
 
     def check_phase(self):
 
+        total    = 0
+        mismatch = 0
+
         while self.bus_port.can_get():
 
             # Get items
@@ -158,11 +161,15 @@ class WriteScoreboard(DFIScoreboard):
             )
 
             # Check
+            total += 1
             if dram_addr == bus_item.addr and dram_data == int(bus_item.data):
                 self.logger.debug(msg)
             else:
+                mismatch += 1
                 self.logger.error(msg)
                 self.passed = False
+
+        self.logger.info("{} / {} mismatches".format(mismatch, total))
 
 
 # =============================================================================
@@ -175,6 +182,9 @@ class ReadScoreboard(DFIScoreboard):
     """
 
     def check_phase(self):
+
+        total    = 0
+        mismatch = 0
 
         while self.bus_port.can_get():
 
@@ -217,8 +227,13 @@ class ReadScoreboard(DFIScoreboard):
                 dfi_item.col
             )
 
+            total += 1
             if dram_addr == bus_item.addr and int(dfi_item.data) == int(bus_item.data):
                 self.logger.debug(msg)
             else:
+                mismatch += 1
                 self.logger.error(msg)
                 self.passed = False
+
+        self.logger.info("{} / {} mismatches".format(mismatch, total))
+
