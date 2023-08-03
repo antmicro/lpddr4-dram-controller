@@ -89,13 +89,14 @@ class PHYNone(Module, AutoCSR):
         # PHY settings ---------------------------------------------------------
 
         write_latency = cwl_phy
+        dfi_databits  = (databits * 2 * ratio) // nphases
 
         self.settings = PhySettings(
             phytype                   = self.__class__.__name__,
             memtype                   = memtype,
             databits                  = databits,
             strobes                   = None,
-            dfi_databits              = (databits * ratio) // nphases,
+            dfi_databits              = dfi_databits,
             nranks                    = nranks,
             nphases                   = nphases,
             rdphase                   = 0 if nphases == 1 else self._rdphase.storage,
@@ -120,9 +121,9 @@ class PHYNone(Module, AutoCSR):
 
         # DFI Interface --------------------------------------------------------
 
-        self.dfi = self.dfi_phy = dfi = Interface(addressbits, bankbits, nranks, (databits * ratio) // nphases, nphases)
+        self.dfi = self.dfi_phy = dfi = Interface(addressbits, bankbits, nranks, dfi_databits, nphases)
         if memtype == "DDR4":
-            dfi = Interface(addressbits, bankbits, nranks, (databits * ratio) // nphases, nphases)
+            dfi = Interface(addressbits, bankbits, nranks, dfi_databits, nphases)
             self.submodules += DDR4DFIMux(self.dfi, dfi)
 
 
