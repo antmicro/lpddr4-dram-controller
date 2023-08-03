@@ -114,7 +114,7 @@ class ReadWriteScoreboard(uvm_component):
 
     def __init__(self, name, parent):
         super().__init__(name, parent)
-        self.passed = True
+        self.passed = None
 
     def build_phase(self):
         self.fifo = uvm_tlm_analysis_fifo("fifo", self)
@@ -133,6 +133,10 @@ class ReadWriteScoreboard(uvm_component):
         # Analyze transactions
         while self.port.can_get():
             _, item = self.port.try_get()
+
+            # Initially pass
+            if self.passed is None:
+                self.passed = True
 
             # Write
             if isinstance(item, BusWriteItem) or isinstance(item, BusRandomWriteItem):

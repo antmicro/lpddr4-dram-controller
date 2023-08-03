@@ -13,7 +13,7 @@ class DFIScoreboard(uvm_component):
 
     def __init__(self, name, parent):
         super().__init__(name, parent)
-        self.passed = True
+        self.passed = None
 
     def build_phase(self):
         self.bus_fifo   = uvm_tlm_analysis_fifo("bus_fifo", self)
@@ -80,13 +80,16 @@ class WriteScoreboard(DFIScoreboard):
                 continue
 
             # Discard if both items are not write
-            if not isinstance(bus_item, BusWriteItem):
-                continue
-            if not isinstance(bus_item, BusRandomWriteItem):
+            if not isinstance(bus_item, BusWriteItem) and \
+               not isinstance(bus_item, BusRandomWriteItem):
                 continue
 
             if not isinstance(dfi_item, DRAMWriteItem):
                 continue
+
+            # Initially pass
+            if self.passed is None:
+                self.passed = True
 
             # Check items
             check = True
@@ -198,13 +201,16 @@ class ReadScoreboard(DFIScoreboard):
                 continue
 
             # Discard if both items are not read
-            if not isinstance(bus_item, BusReadItem):
-                continue
-            if not isinstance(bus_item, BusRandomReadItem):
+            if not isinstance(bus_item, BusReadItem) and \
+               not isinstance(bus_item, BusRandomReadItem):
                 continue
 
             if not isinstance(dfi_item, DRAMReadItem):
                 continue
+
+            # Initially pass
+            if self.passed is None:
+                self.passed = True
 
             # Check items
             # FIXME: Support bus to DFI width ratio
