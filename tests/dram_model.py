@@ -339,6 +339,7 @@ class Model:
             self.passed = False
             return None
 
+        addr = int(self.iface.dfi_address.value)
         ba = int(self.iface.dfi_bank.value)
 
         # Make the command
@@ -348,21 +349,21 @@ class Model:
             cmd.args["bank"] = ba
 
         if cmd.name == "PRE":
-            a10 = bool(self.iface.dfi_address.value & (1 << 10))
+            a10 = bool(addr & (1 << 10))
             if not a10:
                 cmd.args["bank"] = ba
             else:
                 cmd.name += "A"
 
         if cmd.name == "ACT":
-            cmd.args["row"] = int(self.iface.dfi_address.value)
+            cmd.args["row"] = addr
 
         if cmd.name in ["RD", "WR"]:
-            cmd.args["col"] = int(self.iface.dfi_address.value & 0xFFF)
-            cmd.args["burst"] = "BL8" if (self.iface.dfi_address.value & 1 << 12) else "BC4"
+            cmd.args["col"]   = (addr & 0x3FF) | ((addr & (1 << 11)) >> 1)
+            cmd.args["burst"] = "BL8" if (addr & (1 << 12)) else "BC4"
 
         if cmd.name == "ZQC":
-            if self.iface.dfi_address.value & (1 << 10):
+            if addr & (1 << 10):
                 cmd.name += "L"
             else:
                 cmd.name += "S"
