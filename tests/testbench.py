@@ -560,12 +560,12 @@ class BaseEnv(uvm_env):
         # Control Wishbone
         iface = WishboneInterface(cocotb.top, "clk", "wb_ctrl_")
         self.wb_ctrl_driver = WishboneDriver("wb_ctrl_drv", self, iface=iface)
-        self.wb_ctrl_mon    = WishboneMonitor("wb_ctrl_mod", self, iface=iface)
+        self.wb_ctrl_mon    = WishboneMonitor("wb_ctrl_mon", self, iface=iface)
 
         # Data wishbone
         iface = WishboneInterface(cocotb.top, "clk", "user_port_wishbone_0_")
         self.wb_data_driver = WishboneDriver("wb_data_drv", self, iface=iface)
-        self.wb_data_mon    = WishboneMonitor("wb_data_mod", self, iface=iface)
+        self.wb_data_mon    = WishboneMonitor("wb_data_mon", self, iface=iface)
 
         # DFI
         iface = DFIInterface(cocotb.top, "clk", "dfi_")

@@ -28,6 +28,9 @@ class DFIScoreboard(uvm_component):
 
     @staticmethod
     def decode_dram_address(dfi_item):
+        """
+        Decodes DRAM address from row, bank and column addresses.
+        """
 
         # Build DRAM address
         # TODO: Parametrize / extract this data somehow
@@ -44,9 +47,41 @@ class DFIScoreboard(uvm_component):
         bank = dfi_item.bank & bank_mask
 
         dram_addr  = (row  << (col_nb + bank_nb)) | \
-                      (bank << (col_nb)) | col
+                     (bank << (col_nb)) | col
 
-        return dram_addr
+        # FIXME: The controller address alignment for DDR3 is fixed to 8. This
+        # may not work for all DRAM to MC clock ratios but for now lets keep
+        # it fixed.
+        address_alignment = 8
+
+        return dram_addr // address_alignment
+
+    def check_items(self, bus_item, dfi_item):
+        """
+        Check if the items to be compared are of supported configurations.
+        """
+        check = True
+
+        if bus_item.data.n_bits not in [32]:
+            self.logger.critical("Unsupported bus data width {}",
+                bus_item.data.n_bits
+            )
+            check = False
+
+        if dfi_item.data.n_bits not in [32, 64]:
+            self.logger.critical("Unsupported DFI data width {}",
+                dfi_item.data.n_bits
+            )
+            check = False
+
+        ratio = dfi_item.data.n_bits / bus_item.data.n_bits
+        if ratio  not in [1.0, 2.0]:
+            self.logger.critical(
+                "Unsupported bus to DFI data ratio 1:{}".format(ratio)
+            )
+            check = False
+
+        return check
 
     def final_phase(self):
         if not self.passed:
@@ -93,22 +128,7 @@ class WriteScoreboard(DFIScoreboard):
 
             # Check items
             check = True
-
-            if bus_item.data.n_bits not in [32]:
-                self.logger.critical("Unsupported bus data width {}",
-                    bus_item.data.n_bits
-                )
-                check = False
-
-            if dfi_item.data.n_bits not in [32, 64]:
-                self.logger.critical("Unsupported DFI data width {}",
-                    dfi_item.data.n_bits
-                )
-                check = False
-
-            ratio = dfi_item.data.n_bits / bus_item.data.n_bits
-            if ratio  not in [1.0, 2.0, 4.0]:
-                self.logger.critical("Unsupported bus to DFI data ratio")
+            if not self.check_items(bus_item, dfi_item):
                 check = False
 
             # Get data word being written
@@ -147,16 +167,20 @@ class WriteScoreboard(DFIScoreboard):
                 self.passed = False
                 continue
 
-            # Build DRAM address
-            dram_addr  = self.decode_dram_address(dfi_item) >> (3 - (int)(ratio - 1))
-            dram_addr |= word
-            dram_data  = (dfi_item.data >> (32 * word)) & 0xFFFFFFFF
+            # Build word address from DRAM address. Accomodate for the DFI to
+            # Wishbone bus ratio.
+            ratio = dfi_item.data.n_bits // bus_item.data.n_bits
+            word_addr  = self.decode_dram_address(dfi_item) << (ratio - 1)
+            word_addr |= word
 
-            msg = "bus={:08X}:{:08X} vs. dfi={:08X}:{:08X}, bank={} row=0x{:04X} col=0x:{:04X} mask=0x{:02X}".format(
+            # Get the 32-bit data word being written
+            word_data  = (dfi_item.data >> (32 * word)) & 0xFFFFFFFF
+
+            msg = "bus={:08X}:{:08X} vs. dfi={:08X}:{:08X}, bank={} row=0x{:04X} col=0x{:04X} mask=0x{:02X}".format(
                 bus_item.addr,
                 int(bus_item.data),
-                dram_addr,
-                dram_data,
+                word_addr,
+                word_data,
                 dfi_item.bank,
                 dfi_item.row,
                 dfi_item.col,
@@ -165,7 +189,7 @@ class WriteScoreboard(DFIScoreboard):
 
             # Check
             total += 1
-            if dram_addr == bus_item.addr and dram_data == int(bus_item.data):
+            if word_addr == bus_item.addr and word_data == int(bus_item.data):
                 self.logger.debug(msg)
             else:
                 mismatch += 1
@@ -213,17 +237,33 @@ class ReadScoreboard(DFIScoreboard):
                 self.passed = True
 
             # Check items
-            # FIXME: Support bus to DFI width ratio
-            if bus_item.data.n_bits != dfi_item.data.n_bits:
-                self.logger.critical("Bus data width must be equal to DFI data width")
+            check = True
+            if not self.check_items(bus_item, dfi_item):
+                check = False
+
+            # Failure
+            if not check:
                 self.passed = False
                 continue
 
             # Build DRAM address
-            dram_addr = self.decode_dram_address(dfi_item) >> 3
+            dram_addr = self.decode_dram_address(dfi_item)
+
+            # Extract the correct 32-bit word from DFI data. Use lower bit(s)
+            # from the bus read request to tell which word to take from the
+            # DFI bus
+            ratio = dfi_item.data.n_bits // bus_item.data.n_bits
+
+            word_addr = dram_addr << (ratio - 1)
+            word_data = int(dfi_item.data)
+
+            if ratio > 1:
+                word = int(bus_item.addr) % ratio
+                word_addr  |= word
+                word_data   = (word_data >> (32 * word)) & 0xFFFFFFFF
 
             # Check
-            msg = "bus={:08X}:{:08X} vs. dfi={:08X}:{:08X}, bank={} row=0x{:04X} col=0x:{:04X}".format(
+            msg = "bus={:08X}:{:08X} vs. dfi={:08X}:{:08X}, bank={} row=0x{:04X} col=0x{:04X}".format(
                 bus_item.addr,
                 int(bus_item.data),
                 dram_addr,
@@ -234,7 +274,7 @@ class ReadScoreboard(DFIScoreboard):
             )
 
             total += 1
-            if dram_addr == bus_item.addr and int(dfi_item.data) == int(bus_item.data):
+            if word_addr == bus_item.addr and word_data == int(bus_item.data):
                 self.logger.debug(msg)
             else:
                 mismatch += 1

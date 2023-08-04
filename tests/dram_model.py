@@ -410,9 +410,9 @@ class Model:
             # Store data
             if self.with_storage:
                 for i in range(data.n_bits // 8):
-                    if mask[i].value == 0:
+                    if (mask.value & (1 << i)) == 0:
                         key = (bank.row, cmd.args["bank"], cmd.args["col"], i)
-                        dat = (data >> (8 * i)) & 0xFF
+                        dat = (data.integer >> (8 * i)) & 0xFF
                         self.storage[key] = dat
 
             return ("WR", cmd.args["bank"], bank.row, cmd.args["col"], data, mask,)
@@ -448,7 +448,7 @@ class Model:
             # Restore data
             if self.with_storage:
                 data = 0
-                for i in range(self.iface.dfi_rddata.value.n_bits // 8):
+                for i in reversed(range(self.iface.dfi_rddata.value.n_bits // 8)):
                     key = (bank.row, cmd.args["bank"], cmd.args["col"], i)
                     dat = self.storage.get(key, 0x00)
                     data |= (dat << (8 * i))
@@ -458,11 +458,22 @@ class Model:
                     self.iface.dfi_rddata.value.n_bits
                 )
 
-            # Randomize data
+            # Randomize data but keep track of the address the data was
+            # randomized for. Therefore subsequent reads from the same
+            # address will return the same data
             else:
-                top  = (1 << self.iface.dfi_rddata.value.n_bits) - 1
+                key = (bank.row, cmd.args["bank"], cmd.args["col"])
+
+                if key in self.storage:
+                    data = self.storage[key]
+
+                else:
+                    top  = (1 << self.iface.dfi_rddata.value.n_bits) - 1
+                    data = random.randint(0, top)
+                    self.storage[key] = data
+
                 data = make_binary_value(
-                    random.randint(0, top),
+                    data,
                     self.iface.dfi_rddata.value.n_bits
                 )
 
