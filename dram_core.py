@@ -66,6 +66,10 @@ class DRAMController(Module):
         else:
             burst_length = burst_lengths[phy_settings.memtype]
 
+        # FIXME: Unless changed burst_lengths["DDR3"] evaluates to 8 which is
+        # fixed (not computed from the controller config). This may lead to
+        # address skipping eg. when the DFI bus word is shorter than 8.
+
         address_align = log2_int(burst_length)
 
         # Settings -------------------------------------------------------------
