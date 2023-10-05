@@ -9,20 +9,22 @@ defaults:
 jobs:
   generate:
     runs-on: ubuntu-22.04
-
-    env:
-      GIT_SUBMODULE_STRATEGY: "recursive"
-
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           submodules: recursive
+
+      - name: Install Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+          cache: pip
 
       - name: Install system dependencies
         run: |
           sudo apt -qqy update
-          sudo apt -qqy install --no-install-recommends git python3 python3-pip python3-venv nodejs
+          sudo apt -qqy install --no-install-recommends git nodejs
 
       - name: Prepare Python venv and install dependencies
         run: |
@@ -41,4 +43,74 @@ jobs:
         with:
           name: dram-controller
           path: |
-            build/*
+            build
+
+  asic-flow:
+    runs-on: ubuntu-22.04
+    strategy:
+      matrix:
+        pdk:
+          - name: sky130hd
+            steps: drc
+          - name: asap7
+    env:
+      YOSYS_URL: "https://github.com/YosysHQ/oss-cad-suite-build/releases/download/2023-10-05/"
+      YOSYS_TGZ: "oss-cad-suite-linux-x64-20231005.tgz"
+      KLAYOUT_URL: "https://www.klayout.org/downloads/Ubuntu-22/"
+      KLAYOUT_DEB: "klayout_0.28.12-1_amd64.deb"
+      OPENROAD_URL: "https://github.com/Precision-Innovations/OpenROAD/releases/download/2023-10-04/"
+      OPENROAD_DEB: "openroad_2.0_amd64-ubuntu22.04-2023-10-04.deb"
+      DESIGN_CONFIG: "${GITHUB_WORKSPACE}/openroad/configs/${{ matrix.pdk.name }}/config.mk"
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install apt dependencies
+        run: |
+          sudo apt -qqy update
+          sudo apt -qqy --no-install-recommends install \
+            gcc g++ qtbase5-dev qttools5-dev libqt5xmlpatterns5-dev \
+            qtmultimedia5-dev libqt5opengl5 libqt5multimediawidgets5 \
+            libqt5svg5-dev make qt5-qmake qtmultimedia5-dev qttools5-dev \
+            libz-dev ruby ruby-dev python3-dev libtcl tcl-tclreadline time
+
+      - name: Install Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+          cache: pip
+
+      - name: Install OpenROAD tools
+        run: |
+          source .github/scripts/install_tools.sh
+          install_klayout
+          install_yosys
+          install_openroad
+
+      - name: Run ASIC flow
+        run: |
+          cd third_party/OpenROAD-flow-scripts/flow
+          make DESIGN_CONFIG=${DESIGN_CONFIG}
+
+      - name: Run extra ASIC flow steps
+        if: ${{ matrix.pdk.steps }}
+        run: |
+          echo "Running steps: ${{ matrix.pdk.steps }}"
+          cd third_party/OpenROAD-flow-scripts/flow
+          make DESIGN_CONFIG=${DESIGN_CONFIG} ${{ matrix.pdk.steps }}
+
+      - name: Save artifacts
+        run: |
+          mkdir ${GITHUB_WORKSPACE}/artifacts
+          cp -r third_party/OpenROAD-flow-scripts/flow/logs \
+            third_party/OpenROAD-flow-scripts/flow/reports \
+            third_party/OpenROAD-flow-scripts/flow/results \
+            ${GITHUB_WORKSPACE}/artifacts
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: asic-flow-logs
+          path: artifacts
