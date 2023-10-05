@@ -14,27 +14,55 @@
 
 SHELL=/bin/bash
 
-ROOT=$(CURDIR)
+ROOT_DIR=$(CURDIR)
 PROJ?=dram_ctrl
-BUILD_DIR=$(ROOT)/build/$(PROJ)
-TEST_DIR=$(ROOT)/tests
-SRC_DIR=$(ROOT)/src
+BUILD_DIR=$(ROOT_DIR)/build/$(PROJ)
+TEST_DIR=$(ROOT_DIR)/tests
+SRC_DIR=$(ROOT_DIR)/src
+THIRD_PARTY_DIR=$(ROOT_DIR)/third_party
+TP_ORFS_DIR=$(THIRD_PARTY_DIR)/OpenROAD-flow-scripts
 VERILOG_TOP=$(BUILD_DIR)/gateware/$(PROJ).v
 CONFIG?=$(SRC_DIR)/standalone-dfi.yml
+PDK?=sky130hd
+GDS=$(TP_ORFS_DIR)/flow/results/$(PDK)/$(PROJ)/base/6_final.gds
+YOSYS_CMD?=$(shell command -v yosys)
+OPENROAD_EXE?=$(shell command -v openroad)
 
+# Export variables for ASIC flow
+export PROJ
+export ROOT_DIR
+export YOSYS_CMD
+export OPENROAD_EXE
 
 verilog: $(VERILOG_TOP) ## Generate verilog sources
 
 $(VERILOG_TOP):
-	python3 $(ROOT)/gen.py $(CONFIG) --output-dir $(BUILD_DIR) --name $(PROJ)
+	python3 $(ROOT_DIR)/gen.py $(CONFIG) --output-dir $(BUILD_DIR) --name $(PROJ)
 
 tests: $(VERILOG_TOP) ## Run tests in Verilator
 	$(MAKE) -C $(TEST_DIR) sim BUILD_DIR=$(BUILD_DIR)
 
-clean:
+asic: $(GDS) ## Run ASIC flow
+
+$(GDS): $(VERILOG_TOP)
+	$(MAKE) -C $(TP_ORFS_DIR)/flow DESIGN_CONFIG=$(ROOT_DIR)/openroad/configs/${PDK}/config.mk
+
+drc: $(GDS) ## Run DRC phase for generated ASIC
+	$(MAKE) -C $(TP_ORFS_DIR)/flow DESIGN_CONFIG=$(ROOT_DIR)/openroad/configs/${PDK}/config.mk drc
+
+lvs: $(GDS) ## Run LVS phase for generated ASIC
+	$(MAKE) -C $(TP_ORFS_DIR)/flow DESIGN_CONFIG=$(ROOT_DIR)/openroad/configs/${PDK}/config.mk lvs
+
+clean: ## Remove generated verilog sources
 	$(RM) -r $(BUILD_DIR)
 
-.PHONY: clean verilog tests
+clean-asic: ## Remove generated ASIC files
+	$(RM) -r $(TP_ORFS_DIR)/flow/logs/$(PDK)/$(PROJ)
+	$(RM) -r $(TP_ORFS_DIR)/flow/results/$(PDK)/$(PROJ)
+	$(RM) -r $(TP_ORFS_DIR)/flow/objects/$(PDK)/$(PROJ)
+	$(RM) -r $(TP_ORFS_DIR)/flow/reports/$(PDK)/$(PROJ)
+
+.PHONY: clean clean-asic verilog tests asic asic-drc asic-lvs
 
 .DEFAULT_GOAL := help
 HELP_COLUMN_SPAN = 10
@@ -48,3 +76,4 @@ help: ## Show this help message
 	@echo
 	@echo -e "\033[36mCONFIG\033[0m     Path to controller configuration file (default: '$(CONFIG)')"
 	@echo -e "\033[36mPROJ\033[0m       Top module design name (default: '$(PROJ)')"
+	@echo -e "\033[36mPDK\033[0m        Name of Physical Design Kit for ASIC flow (default: '$(PDK)')"

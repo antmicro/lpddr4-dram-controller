@@ -4,3 +4,5 @@ migen
 git+https://github.com/pyuvm/pyuvm@7642a84
 git+https://github.com/cocotb/cocotb@3672868 
 pytest
+pyyaml
+orderedmultidict

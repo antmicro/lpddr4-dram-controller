@@ -1,8 +1,6 @@
 #!/bin/bash
 set -ex
 
-echo "ROOT_DIR=${PWD}" >> $GITHUB_ENV
-
 install_klayout() {
     if ! command -v klayout > /dev/null; then
         wget ${KLAYOUT_URL}${KLAYOUT_DEB}

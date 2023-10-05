@@ -82,6 +82,10 @@ jobs:
           python-version: '3.10'
           cache: pip
 
+      - name: Install Python dependencies
+        run: |
+          pip3 install -r requirements.txt
+
       - name: Install OpenROAD tools
         run: |
           source .github/scripts/install_tools.sh
@@ -91,15 +95,13 @@ jobs:
 
       - name: Run ASIC flow
         run: |
-          cd third_party/OpenROAD-flow-scripts/flow
-          make DESIGN_CONFIG=${DESIGN_CONFIG}
+          make PDK=${{ matrix.pdk.name }} asic
 
       - name: Run extra ASIC flow steps
         if: ${{ matrix.pdk.steps }}
         run: |
           echo "Running steps: ${{ matrix.pdk.steps }}"
-          cd third_party/OpenROAD-flow-scripts/flow
-          make DESIGN_CONFIG=${DESIGN_CONFIG} ${{ matrix.pdk.steps }}
+          make PDK=${{ matrix.pdk.name }} ${{ matrix.pdk.steps }}
 
       - name: Save artifacts
         run: |
