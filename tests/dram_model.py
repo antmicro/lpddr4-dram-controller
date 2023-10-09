@@ -89,7 +89,7 @@ class Timings:
     """
 
     # Timing names
-    TIMINGS = {
+    TIMINGS = [
         "tRP",
         "tRCD",
         "tWR",
@@ -102,7 +102,7 @@ class Timings:
         "tRC",
         "tRAS",
         "tZQCS",
-    }
+    ]
 
     def __init__(self, uvm_context=None, uvm_inst_name="*"):
         for timing in self.TIMINGS:
