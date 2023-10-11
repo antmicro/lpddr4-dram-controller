@@ -6,6 +6,10 @@
 # SPDX-License-Identifier: BSD-2-Clause
 
 import os
+import sys
+filepath = os.path.join(os.path.dirname(os.path.abspath(__file__)), "src")
+sys.path.append(filepath)
+
 import yaml
 import argparse
 import inspect
