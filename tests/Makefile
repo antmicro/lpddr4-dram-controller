@@ -9,9 +9,10 @@ TEST_FILES       = $(sort $(wildcard test_*.py))
 MODULE          ?= $(subst $(space),$(comma),$(subst .py,,$(TEST_FILES)))
 TOPLEVEL         = dram_ctrl
 TOPLEVEL_LANG    = verilog
+BUILD_DIR       ?= ../build/$(TOPLEVEL)
 
-VERILOG_SOURCES  = ../build/gateware/dram_ctrl.v
-export CSR_CSV   = ../build/csr.csv
+VERILOG_SOURCES  = $(BUILD_DIR)/gateware/dram_ctrl.v
+export CSR_CSV   = $(BUILD_DIR)/csr.csv
 
 SIM             ?= verilator
 WAVES           ?= 1
