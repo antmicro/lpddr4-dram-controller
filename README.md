@@ -1,10 +1,14 @@
 # DRAM Controller
 
-A DRAM controller with DFI interface based on LiteDRAM
+Copyright (c) 2023 [Antmicro](https://antmicro.com/)
 
-## Building
+## Introduction
 
-Clone submodules
+This project contains a DRAM controller with DFI interface based on LiteDRAM.
+
+## Prerequisites
+
+Clone submodules:
 ```bash
 git submodule update --init --recursive
 ```
@@ -14,17 +18,18 @@ Install prerequisities (preferrably in a Python virtualenv). **Use Python3 < 11.
 pip install -r requirements.txt
 ```
 
+If you want to enable testing capabilities, you will also need a [Verilator](https://github.com/verilator/verilator) simulator.
+
+## Building
+
 Generate the core using the example configuration:
 ```bash
-./gen.py standalone-dfi.yml
+make verilog
 ```
 
-Build files should be written to the `build` directory by default.
+Build files will be written to the `build` directory.
+Custom DFI configuration file can be provided by passing `CONFIG` flag to the Make build flow.
 
 ## Testing
 
-Go to the `tests` directory and run `make sim`:
-```bash
-cd tests
-make sim
-```
+With all prerequisites satisfied, it should be sufficient to run `make tests` to execute all available tests.
