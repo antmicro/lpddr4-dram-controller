@@ -7,8 +7,10 @@ defaults:
     shell: bash
 
 jobs:
-  generate:
+  tests:
     runs-on: ubuntu-22.04
+    env:
+      VERILATOR_VERSION: v5.016
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -21,10 +23,61 @@ jobs:
           python-version: '3.10'
           cache: pip
 
+      - name: Setup Cache Metadata
+        id: cache_metadata
+        run: |
+          cache_restore_key=cache_verilator_
+          echo "cache_date=$(date +"%Y_%m_%d")" | tee -a "$GITHUB_ENV"
+          echo "cache_restore_key=$cache_restore_key" | tee -a "$GITHUB_ENV"
+          echo "cache_name=$cache_restore_key${{ env.VERILATOR_VERSION }}" | tee -a "$GITHUB_ENV"
+          echo "/opt/verilator/bin" >> $GITHUB_PATH
+
+      - name: Setup cache
+        uses: actions/cache@v3
+        id: cache
+        timeout-minutes: 60
+        with:
+          path: |
+            /opt/verilator
+            /opt/verilator/.cache
+          key: ${{ env.cache_name }}
+          restore-keys: ${{ env.cache_restore_key }}
+
       - name: Install system dependencies
         run: |
           sudo apt -qqy update
           sudo apt -qqy install --no-install-recommends git nodejs
+
+      - name: Install Verilator prerequisities
+        if: ${{ steps.cache.outputs.cache-hit != 'true' }}
+        run: |
+          sudo apt -qqy update && sudo apt -qqy --no-install-recommends install \
+          autoconf automake autotools-dev \
+          bc bison build-essential \
+          ccache curl \
+          flex \
+          gawk git gperf \
+          help2man \
+          libexpat-dev libfl-dev libfl2 libgmp-dev \
+          libmpc-dev libmpfr-dev libtool \
+          ninja-build \
+          patchutils python3 python3-pip \
+          texinfo \
+          zlib1g zlib1g-dev
+
+      - name: Install Verilator
+        if: ${{ steps.cache.outputs.cache-hit != 'true' }}
+        run: |
+          export CCACHE_DIR=/opt/verilator/.cache
+          ccache --show-config | grep cache_dir
+          git clone https://github.com/verilator/verilator
+          pushd verilator
+            git checkout ${{ env.VERILATOR_VERSION }}
+            autoconf
+            ./configure --prefix=/opt/verilator
+            make -j `nproc`
+            sudo make install
+          popd
 
       - name: Prepare Python venv and install dependencies
         run: |
@@ -38,12 +91,22 @@ jobs:
           source ./env/bin/activate
           make verilog
 
+      - name: Run tests
+        run: |
+          source ./env/bin/activate
+          make tests | tee tests.log
+          /bin/bash -c '! grep "failure" results.xml >/dev/null'
+
       - name: Upload artifacts
         uses: actions/upload-artifact@v3
         with:
           name: dram-controller
           path: |
             build
+            tests/*.vcd
+            tests/results.xml
+            tests/tests.log
+
 
   asic-flow:
     runs-on: ubuntu-22.04
