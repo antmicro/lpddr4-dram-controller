@@ -170,17 +170,6 @@ class DRAMController(Module):
 
 class DRAMCore(Module, AutoCSR):
     def __init__(self, phy, module, clk_freq, **kwargs):
-        self.submodules.dfii = DFIInjector(
-            addressbits = max(module.geom_settings.addressbits, getattr(phy, "addressbits", 0)),
-            bankbits    = max(module.geom_settings.bankbits, getattr(phy, "bankbits", 0)),
-            nranks      = phy.settings.nranks,
-            databits    = phy.settings.dfi_databits,
-            nphases     = phy.settings.nphases,
-            memtype     = phy.settings.memtype,
-            strobes     = phy.settings.strobes,
-            with_sub_channels= phy.settings.with_sub_channels)
-        self.comb += self.dfii.master.connect(phy.dfi)
-
         self.submodules.controller = controller = DRAMController(
             phy_settings        = phy.settings,
             geom_settings       = module.geom_settings,
@@ -188,6 +177,6 @@ class DRAMCore(Module, AutoCSR):
             max_expected_values = module.maximal_timing_values,
             clk_freq            = clk_freq,
             **kwargs)
-        self.comb += controller.dfi.connect(self.dfii.slave)
+        self.comb += controller.dfi.connect(phy.dfi)
 
         self.submodules.crossbar = DRAMCrossbar(controller.interface)
