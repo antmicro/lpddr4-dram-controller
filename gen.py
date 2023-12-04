@@ -261,17 +261,23 @@ class DRAMCoreSoC(LiteXSoC):
         # PHY stub
         self.submodules.ddrphy = sdram_phy = PHYNone (
             memtype          = core_config["memtype"],
+            sys_clk_freq     = sys_clk_freq,
             nphases          = core_config.get("dfi_nphases",     4),
             addressbits      = core_config.get("dfi_addressbits", 10),
             databits         = core_config.get("sdram_data_nb",   32),
             bankbits         = core_config.get("dfi_bankbits",    2),
             nranks           = core_config.get("sdram_rank_nb",   1),
             ratio            = int(rate.split(":")[-1]),
-            cl               = 5,
-            cwl              = 5,
-            cmd_latency      = 0,
+            t_phy_wrlat      = core_config.get("t_phy_wrlat", None),
+            cl               = core_config.get("cl",  5),
+            cwl              = core_config.get("cwl", 5),
+            cmd_latency      = core_config.get("cmd_latency", 0),
             cmd_delay        = None,
-            cwl_phy          = 3,
+            cwl_phy          = core_config.get("cwl_phy", 3),
+            read_latency     = core_config.get("read_latency", None),
+            write_latency    = core_config.get("write_latency", None),
+            rdphase          = core_config.get("rdphase", None),
+            wrphase          = core_config.get("wrphase", None),
         )
         self.expose_dfi(platform, sdram_phy.dfi)
 

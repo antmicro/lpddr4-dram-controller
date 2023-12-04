@@ -34,7 +34,12 @@ class PHYNone(Module, AutoCSR):
         cmd_latency     = 0,
         cmd_delay       = None,
         cwl_phy         = 0,
-        ):
+        read_latency    = None,
+        write_latency   = None,
+        rdphase         = None,
+        wrphase         = None,
+        t_phy_wrlat     = None,
+    ):
 
         tck = 2/(2*ratio*sys_clk_freq)
 
@@ -71,8 +76,10 @@ class PHYNone(Module, AutoCSR):
         cl_sys_latency  = get_sys_latency(nphases, cl)
         cwl_sys_latency = get_sys_latency(nphases, cwl)
         if nphases > 1:
-            rdphase = get_sys_phase(nphases, cl_sys_latency,   cl + cmd_latency)
-            wrphase = get_sys_phase(nphases, cwl_sys_latency, cwl + cmd_latency)
+            if rdphase is None:
+                rdphase = get_sys_phase(nphases, cl_sys_latency,   cl + cmd_latency)
+            if wrphase is None:
+                wrphase = get_sys_phase(nphases, cwl_sys_latency, cwl + cmd_latency)
 
         # CSRs -----------------------------------------------------------------
         self._rst = CSRStorage()
@@ -88,7 +95,7 @@ class PHYNone(Module, AutoCSR):
 
         # PHY settings ---------------------------------------------------------
 
-        write_latency = cwl_phy
+        write_latency = cwl_phy if write_latency is None else write_latency
         dfi_databits  = (databits * 2 * ratio) // nphases
 
         self.settings = PhySettings(
@@ -103,9 +110,9 @@ class PHYNone(Module, AutoCSR):
             wrphase                   = 0 if nphases == 1 else self._wrphase.storage,
             cl                        = cl,
             cwl                       = cwl,
-            read_latency              = None, # read latency is controlled by PHY
+            read_latency              = read_latency, # None, # read latency is controlled by PHY
             write_latency             = write_latency,
-            t_phy_wrlat               = write_latency,
+            t_phy_wrlat               = 0 if t_phy_wrlat is None else t_phy_wrlat, # write_latency,
             cmd_latency               = cmd_latency,
             cmd_delay                 = cmd_delay,
             write_leveling            = False,
