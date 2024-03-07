@@ -1,9 +1,9 @@
 [submodule "third_party/litedram"]
 	path = third_party/litedram
-	url = ../litedram.git
+	url = https://github.com/antmicro/litedram.git
 [submodule "third_party/litex"]
 	path = third_party/litex
-	url = ../litex.git
+	url = https://github.com/antmicro/litex.git
 [submodule "third_party/OpenROAD-flow-scripts"]
 	path = third_party/OpenROAD-flow-scripts
 	url = https://github.com/The-OpenROAD-Project/OpenROAD-flow-scripts.git
