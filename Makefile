@@ -45,13 +45,13 @@ tests: $(VERILOG_TOP) ## Run tests in Verilator
 asic: $(GDS) ## Run ASIC flow
 
 $(GDS): $(VERILOG_TOP)
-	$(MAKE) -C $(TP_ORFS_DIR)/flow DESIGN_CONFIG=$(ROOT_DIR)/openroad/configs/${PDK}/config.mk
+	$(MAKE) -C $(TP_ORFS_DIR)/flow DESIGN_CONFIG=$(ROOT_DIR)/openroad/${PROJ}/configs/${PDK}/config.mk
 
 drc: $(GDS) ## Run DRC phase for generated ASIC
-	$(MAKE) -C $(TP_ORFS_DIR)/flow DESIGN_CONFIG=$(ROOT_DIR)/openroad/configs/${PDK}/config.mk drc
+	$(MAKE) -C $(TP_ORFS_DIR)/flow DESIGN_CONFIG=$(ROOT_DIR)/openroad/${PROJ}/configs/${PDK}/config.mk drc
 
 lvs: $(GDS) ## Run LVS phase for generated ASIC
-	$(MAKE) -C $(TP_ORFS_DIR)/flow DESIGN_CONFIG=$(ROOT_DIR)/openroad/configs/${PDK}/config.mk lvs
+	$(MAKE) -C $(TP_ORFS_DIR)/flow DESIGN_CONFIG=$(ROOT_DIR)/openroad/${PROJ}/configs/${PDK}/config.mk lvs
 
 clean: ## Remove generated verilog sources
 	$(RM) -r $(BUILD_DIR)
@@ -61,6 +61,9 @@ clean-asic: ## Remove generated ASIC files
 	$(RM) -r $(TP_ORFS_DIR)/flow/results/$(PDK)/$(PROJ)
 	$(RM) -r $(TP_ORFS_DIR)/flow/objects/$(PDK)/$(PROJ)
 	$(RM) -r $(TP_ORFS_DIR)/flow/reports/$(PDK)/$(PROJ)
+
+asic-ander:
+	$(MAKE) PROJ=ander -C $(TP_ORFS_DIR)/flow DESIGN_CONFIG=$(ROOT_DIR)/openroad/${PROJ}/configs/${PDK}/config.mk
 
 .PHONY: clean clean-asic verilog tests asic asic-drc asic-lvs
 
