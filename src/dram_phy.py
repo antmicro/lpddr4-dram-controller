@@ -136,7 +136,7 @@ class PHYNone(Module, AutoCSR):
 
 def phynone_with_ratio(ratio, phy_cls=PHYNone, serdes_reset_cnt=0):
     """
-    Generate PHY class that uses DFIRateConverter to increase MC:PHY frequecy
+    Generate PHY class that uses DFIRateConverter to increase MC:PHY frequency
     ratio
     """
 

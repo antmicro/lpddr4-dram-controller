@@ -1,5 +1,4 @@
-#
-# Copyright (c) 2023
+# Copyright (c) 2023-2024 Antmicro <www.antmicro.com>
 # SPDX-License-Identifier: Apache-2.0
 
 """
@@ -12,104 +11,15 @@ from pyuvm import *
 
 from cocotb.clock import Clock
 from cocotb.triggers import RisingEdge, FallingEdge
-from cocotb.queue import Queue
 
 import os
 import logging
-import random
-from enum import Enum
 
-import dram_model as dram
+from common import BusReadItem, BusRandomReadItem, DRAMReadItem, \
+                   BusWriteItem, BusRandomWriteItem, WaitItem
+
+from dram_model import Model, Timings
 from csr import load_csrs
-
-# =============================================================================
-
-class BusWriteItem(uvm_sequence_item):
-    """
-    A generic data bus write request / response
-    """
-    def __init__(self, addr, data):
-        super().__init__("{:08X}:{:08X}".format(addr, int(data)))
-        self.addr = addr
-        self.data = data
-
-    def randomize(self):
-        pass
-
-class BusRandomWriteItem(uvm_sequence_item):
-    """
-    A randomized data bus write request / response. Randomizes data and
-    address. Valid address range must be provided
-    """
-    def __init__(self, addr_range):
-        super().__init__("bus_random_write_item")
-        self.addr_range = addr_range
-        self.addr = None
-        self.data = None
-
-    def randomize(self):
-        self.addr = random.randint(*self.addr_range) & ~0x3
-        self.data = random.randint(0x00000000, 0xFFFFFFFF)
-
-class BusReadItem(uvm_sequence_item):
-    """
-    A generic data bus read request / response
-    """
-    def __init__(self, addr, data=None):
-        super().__init__("{:08X}".format(addr))
-        self.addr = addr
-        self.data = data
-
-    def randomize(self):
-        pass
-
-class BusRandomReadItem(uvm_sequence_item):
-    def __init__(self, addr_range):
-        super().__init__("bus_random_read_item")
-        self.addr_range = addr_range
-        self.addr = None
-        self.data = None
-
-    def randomize(self):
-        self.addr = random.randint(*self.addr_range) & ~0x3
-
-class WaitItem(uvm_sequence_item):
-    """
-    A generic wait item. Used to instruct a driver to wait N cycles
-    """
-    def __init__(self, cycles):
-        super().__init__("@{}".format(cycles))
-        self.cycles = cycles
-
-    def randomize(self):
-        pass
-
-class DRAMWriteItem(uvm_sequence_item):
-    """
-    DRAM write item, conveys arguments of DFI write command
-    """
-    def __init__(self, bank, row, col, data, mask):
-        super().__init__("WR:{:02X}_{:04X}_{:03X}_{:016X}_{:02X}".format(
-            bank, row, col, int(data), int(mask))
-        )
-        self.bank = bank
-        self.row  = row
-        self.col  = col
-        self.data = data
-        self.mask = mask
-
-class DRAMReadItem(uvm_sequence_item):
-    """
-    DRAM read item, conveys arguments of DFI read command
-    """
-    def __init__(self, bank, row, col, data):
-        super().__init__("RD:{:02X}_{:04X}_{:03X}_{:016X}".format(
-            bank, row, col, int(data))
-        )
-        self.bank = bank
-        self.row  = row
-        self.col  = col
-        self.data = data
 
 # =============================================================================
 
@@ -413,11 +323,13 @@ class DFIMonitor(uvm_component):
 
         # Instantiate a PHY+DRAM model
         storage = ConfigDB().get(self, "", "DRAM_STORAGE") != 0
-        self.dram = dram.Model(self.iface, self.logger, with_storage=storage)
+        self.dram = Model(self.iface, self.logger, with_storage=storage)
 
     def build_phase(self):
         self.ap = uvm_analysis_port("ap", self)
         self.rp = uvm_seq_item_export("rp", self)
+
+        self.dram.ap = self.ap
 
     async def run_phase(self):
         while True:
@@ -426,11 +338,13 @@ class DFIMonitor(uvm_component):
             await RisingEdge(self.iface.dfi_clk)
             res = await self.dram.tick()
 
-            # If a read/write has been detected push it to the analysis port
+            # If a read/write has been detected, push it to the analysis port
             # Push read requests to the read request port (rp)
             if res:
                 if res[0] == "WR":
-                    self.ap.write(DRAMWriteItem(*res[1:]))
+                    # Write items are being sent to the analysis port by the
+                    # separate coroutine spawned inside the `self.dram.tick()`
+                    pass
 
                 elif res[0] == "RD":
                     self.ap.write(DRAMReadItem(*res[1:]))
@@ -486,13 +400,10 @@ class InitSeq(uvm_sequence):
     async def body(self):
 
         # Setup timings
-        for timing in dram.Timings.TIMINGS:
+        for timing in Timings.TIMINGS:
             value = int(ConfigDB().get(None, "", timing))
             csr_name = "dram_ctrl_controller_" + timing
             await self.write_csr(csr_name, value)
-
-        # Enable software DFI control
-        await self.write_csr("dram_ctrl_dfii_control", 0xE)
 
         # Reset the DRAM memory
         await self.write_csr("ddrphy_rst", 1)
@@ -502,13 +413,6 @@ class InitSeq(uvm_sequence):
         await self.finish_item(item)
 
         await self.write_csr("ddrphy_rst", 0)
-
-        # Enable software DFI control (reset only)
-        await self.write_csr("dram_ctrl_dfii_control", 0x8)
-
-        # DFI command
-        await self.write_csr("dram_ctrl_dfii_pi0_command", 0)
-        await self.write_csr("dram_ctrl_dfii_pi0_command_issue", 1)
 
         # Instruct the PHY to begin training
         await self.write_csr("dram_ctrl_controller_phy_ctl", 1)
@@ -531,9 +435,6 @@ class InitSeq(uvm_sequence):
         else:
             uvm_root().logger.critical("PHY training timeout!")
             assert False
-
-        # Switch DFI to hardware control
-        await self.write_csr("dram_ctrl_dfii_control", 1)
 
         # Write the status CSRs
         await self.write_csr("ddrctrl_init_done",  1)
@@ -595,11 +496,13 @@ class BaseTest(uvm_test):
         level = logging.getLevelName(os.environ.get("COCOTB_LOG_LEVEL", "INFO"))
         uvm_report_object.set_default_logging_level(level)
 
+        # Load the config
         db = ConfigDB()
         db.set(None, "*", "CSR_CSV",  os.environ.get("CSR_CSV", "csr.csv"))
         db.set(None, "*", "CLK_FREQ", 100.0)
 
         db.set(None, "*", "CL",       3)
+        db.set(None, "*", "WR_LAT",   3)
 
         db.set(None, "*", "tRP",      2)
         db.set(None, "*", "tRCD",     2)

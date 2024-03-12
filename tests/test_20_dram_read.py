@@ -1,9 +1,12 @@
+# Copyright (c) 2023-2024 Antmicro <www.antmicro.com>
+# SPDX-License-Identifier: Apache-2.0
+
 import random
 
 import pyuvm
 from pyuvm import *
 
-from testbench import BusRandomReadItem, WaitItem
+from common import BusRandomReadItem, WaitItem
 from testbench import BaseEnv, BaseTest
 
 from dfi_scoreboard import ReadScoreboard

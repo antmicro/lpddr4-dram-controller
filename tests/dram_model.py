@@ -1,4 +1,4 @@
-# Copyright (c) 2023 Antmicro <www.antmicro.com>
+# Copyright (c) 2023-2024 Antmicro <www.antmicro.com>
 # SPDX-License-Identifier: Apache-2.0
 
 """
@@ -14,11 +14,12 @@ import random
 
 from pyuvm import ConfigDB
 import cocotb.utils
-from cocotb.triggers import RisingEdge
+from cocotb.triggers import RisingEdge, ClockCycles
 from cocotb.binary import BinaryValue
 
-# =============================================================================
+from common import DRAMWriteItem
 
+# =============================================================================
 
 class Command:
     """
@@ -241,6 +242,7 @@ class Model:
         self.clk_freq = float(ConfigDB().get(None, "", "CLK_FREQ"))
         self.timings  = Timings(None, "")
         self.cl       = ConfigDB().get(None, "", "CL")
+        self.wr_lat   = ConfigDB().get(None, "", "WR_LAT")
 
         # Create the timing checker
         self.timing_checker = TimingChecker(self.timings, self.clk_freq, self.logger)
@@ -248,6 +250,9 @@ class Model:
         # TODO: Get DFI signal width
         self.banks  = {b: Bank() for b in range(1 << 3)}
         self.queue  = []
+
+        # Analysis port from parent monitor
+        self.ap = None
 
     async def tick(self):
         """
@@ -281,16 +286,14 @@ class Model:
                 bank.row        = cmd.args["row"]
 
             elif cmd.name == "PRE":
-
                 bank = self.banks[cmd.args["bank"]]
                 bank.is_active  = False
                 bank.row        = None
 
             elif cmd.name == "PREA":
-
-                    for bank in self.banks.values():
-                        bank.is_active  = False
-                        bank.row        = None
+                for bank in self.banks.values():
+                    bank.is_active  = False
+                    bank.row        = None
 
             elif cmd.name == "WR":
                 bank = self.banks[cmd.args["bank"]]
@@ -372,6 +375,52 @@ class Model:
 
         return cmd
 
+    async def report_dfi_write(self):
+        """
+        Checks DFI signals after `self.wr_lat` cycles and sends them to the
+        parent monitor analysis port. This should be spawned as a separate
+        coroutine.
+        """
+
+        await ClockCycles(self.iface.dfi_clk, self.wr_lat)
+
+        data = self.iface.dfi_wrdata.value
+        mask = self.iface.dfi_wrdata_mask.value
+
+        # Check and pop write command
+        if not len(self.queue) or self.queue[0].name != "WR":
+            self.logger.error("DFI write without pending DRAM write command")
+            self.passed = False
+            return None
+
+        cmd = self.queue[0]
+        self.queue = self.queue[1:]
+
+        # Check if the bank is active
+        bank = self.banks[cmd.args["bank"]]
+
+        if not bank.is_active:
+            self.logger.error("DFI write to an inactive bank")
+            return None
+
+        # Write
+        self.logger.debug("{} row=0x{:04X} data=0x{:08X} mask=0x{:02X}".format(
+            cmd,
+            bank.row,
+            data.integer,
+            mask.integer
+        ))
+
+        # Store data
+        if self.with_storage:
+            for i in range(data.n_bits // 8):
+                if (mask.value & (1 << i)) == 0:
+                    key = (bank.row, cmd.args["bank"], cmd.args["col"], i)
+                    dat = (data.integer >> (8 * i)) & 0xFF
+                    self.storage[key] = dat
+
+        self.ap.write(DRAMWriteItem(cmd.args["bank"], bank.row, cmd.args["col"], data, mask))
+
     async def handle_dfi_io(self):
         """
         Handles DFI data operations. Upon a successful write detection returns
@@ -380,43 +429,9 @@ class Model:
 
         # Write
         if self.iface.dfi_wrdata_en.value:
+            await cocotb.start(self.report_dfi_write())
 
-            data = self.iface.dfi_wrdata.value
-            mask = self.iface.dfi_wrdata_mask.value
-
-            # Check and pop write command
-            if not len(self.queue) or self.queue[0].name != "WR":
-                self.logger.error("DFI write without pending DRAM write command")
-                self.passed = False
-                return None
-
-            cmd = self.queue[0]
-            self.queue = self.queue[1:]
-
-            # Check if the bank is active
-            bank = self.banks[cmd.args["bank"]]
-
-            if not bank.is_active:
-                self.logger.error("DFI write to an inactive bank")
-                return None
-
-            # Write
-            self.logger.debug("{} row=0x{:04X} data=0x{:08X} mask=0x{:02X}".format(
-                cmd,
-                bank.row,
-                data.integer,
-                mask.integer
-            ))
-
-            # Store data
-            if self.with_storage:
-                for i in range(data.n_bits // 8):
-                    if (mask.value & (1 << i)) == 0:
-                        key = (bank.row, cmd.args["bank"], cmd.args["col"], i)
-                        dat = (data.integer >> (8 * i)) & 0xFF
-                        self.storage[key] = dat
-
-            return ("WR", cmd.args["bank"], bank.row, cmd.args["col"], data, mask,)
+            return ["WR"]
 
         # Read
         if self.iface.dfi_rddata_en.value:

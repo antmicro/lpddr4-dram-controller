@@ -1,10 +1,11 @@
-# Copyright (c) 2023
+# Copyright (c) 2023-2024 Antmicro <www.antmicro.com>
 # SPDX-License-Identifier: Apache-2.0
 
 import pyuvm
 from pyuvm import uvm_sequence
 
-from testbench import BaseTest, WaitItem
+from common import WaitItem
+from testbench import BaseTest
 
 # =============================================================================
 

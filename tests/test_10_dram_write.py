@@ -1,4 +1,4 @@
-# Copyright (c) 2023
+# Copyright (c) 2023-2024 Antmicro <www.antmicro.com>
 # SPDX-License-Identifier: Apache-2.0
 
 import random
@@ -6,7 +6,7 @@ import random
 import pyuvm
 from pyuvm import *
 
-from testbench import BusRandomWriteItem, WaitItem
+from common import BusRandomWriteItem, WaitItem
 from testbench import BaseEnv, BaseTest
 
 from dfi_scoreboard import WriteScoreboard

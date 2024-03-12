@@ -1,7 +1,10 @@
+# Copyright (c) 2023-2024 Antmicro <www.antmicro.com>
+# SPDX-License-Identifier: Apache-2.0
+
 from pyuvm import *
 
-from testbench import BusReadItem, BusRandomReadItem, DRAMReadItem
-from testbench import BusWriteItem, BusRandomWriteItem, DRAMWriteItem
+from common import BusReadItem, BusRandomReadItem, DRAMReadItem, \
+                   BusWriteItem, BusRandomWriteItem, DRAMWriteItem
 
 # =============================================================================
 
@@ -110,7 +113,7 @@ class WriteScoreboard(DFIScoreboard):
             got_dfi, dfi_item = self.dfi_port.try_get()
 
             if not got_dfi:
-                self.logger.critical("No DFI read/write for for DRAM command")
+                self.logger.critical("No DFI read/write for DRAM command")
                 self.passed = False
                 continue
 

@@ -1,4 +1,4 @@
-# Copyright (c) 2023
+# Copyright (c) 2023-2024 Antmicro <www.antmicro.com>
 # SPDX-License-Identifier: Apache-2.0
 
 """
@@ -10,8 +10,8 @@ import random
 import pyuvm
 from pyuvm import *
 
-from testbench import BusReadItem, BusRandomReadItem
-from testbench import BusWriteItem, BusRandomWriteItem
+from common import BusReadItem, BusRandomReadItem, \
+                   BusWriteItem, BusRandomWriteItem
 from testbench import BaseEnv, BaseTest
 
 from dfi_scoreboard import ReadScoreboard, WriteScoreboard
@@ -187,7 +187,7 @@ class TestReadWriteEnv(BaseEnv):
         self.rw_scoreboard    = ReadWriteScoreboard("rw_scoreboard", self)
 
         # Set sequencer to be used by read sequences
-        ConfigDB().set(None, "*", "SEQR", self.wb_data_seqr);
+        ConfigDB().set(None, "*", "SEQR", self.wb_data_seqr)
 
     def connect_phase(self):
         super().connect_phase()
