@@ -21,7 +21,6 @@ TEST_DIR=$(ROOT_DIR)/tests
 SRC_DIR=$(ROOT_DIR)/src
 THIRD_PARTY_DIR=$(ROOT_DIR)/third_party
 TP_ORFS_DIR=$(THIRD_PARTY_DIR)/OpenROAD-flow-scripts
-VERILOG_TOP=$(BUILD_DIR)/gateware/$(PROJ).v
 CONFIG?=$(SRC_DIR)/standalone-dfi.yml
 PDK?=sky130hd
 GDS=$(TP_ORFS_DIR)/flow/results/$(PDK)/$(PROJ)/base/6_final.gds
@@ -33,6 +32,15 @@ export PROJ
 export ROOT_DIR
 export YOSYS_CMD
 export OPENROAD_EXE
+
+# Determine verilog top file path based on project name
+ifeq '$(PROJ)' 'ander'
+VERILOG_TOP=$(ROOT_DIR)/ander/ander.sv
+else ifeq '$(PROJ)' 'dram_ctrl'
+VERILOG_TOP=$(BUILD_DIR)/gateware/$(PROJ).v
+else ifeq '$(VERILOG_TOP)' ''
+$(error Uknown project '$(PROJ)', please set 'VERILOG_TOP' to the verilog top file path)
+endif
 
 verilog: $(VERILOG_TOP) ## Generate verilog sources
 
@@ -61,9 +69,6 @@ clean-asic: ## Remove generated ASIC files
 	$(RM) -r $(TP_ORFS_DIR)/flow/results/$(PDK)/$(PROJ)
 	$(RM) -r $(TP_ORFS_DIR)/flow/objects/$(PDK)/$(PROJ)
 	$(RM) -r $(TP_ORFS_DIR)/flow/reports/$(PDK)/$(PROJ)
-
-asic-ander:
-	$(MAKE) PROJ=ander -C $(TP_ORFS_DIR)/flow DESIGN_CONFIG=$(ROOT_DIR)/openroad/${PROJ}/configs/${PDK}/config.mk
 
 .PHONY: clean clean-asic verilog tests asic asic-drc asic-lvs
 
