@@ -24,9 +24,11 @@ THIRD_PARTY_DIR=$(ROOT_DIR)/third_party
 TP_ORFS_DIR=$(THIRD_PARTY_DIR)/OpenROAD-flow-scripts
 CONFIG?=$(SRC_DIR)/standalone-dfi.yml
 PDK?=sky130hd
-GDS=$(TP_ORFS_DIR)/flow/results/$(PDK)/$(PROJ)/base/6_final.gds
+RESULTS_DIR=$(TP_ORFS_DIR)/flow/results/$(PDK)/$(PROJ)/base
+GDS=$(RESULTS_DIR)/6_final.gds
 YOSYS_CMD?=$(shell command -v yosys)
 OPENROAD_EXE?=$(shell command -v openroad)
+OPENSTA_EXE?=$(shell command -v sta)
 
 # Include ORFS Makefile
 # include $(TP_ORFS_DIR)/flow/Makefile
@@ -36,6 +38,10 @@ export PROJ
 export ROOT_DIR
 export YOSYS_CMD
 export OPENROAD_EXE
+
+export PDK
+export TP_ORFS_DIR
+export RESULTS_DIR
 
 # Determine verilog top file path based on project name
 ifeq '$(PROJ)' 'ander'
@@ -67,6 +73,9 @@ lvs: $(GDS) ## Run LVS phase for generated ASIC
 
 power-analysis:
 	bash opensta/run_sta.sh
+
+pwr-sweep: $(GDS) ## Run power analysis for different operating frequencies
+	$(OPENSTA_EXE) opensta/pwr_sweep.tcl
 
 clean: ## Remove generated verilog sources
 	$(RM) -r $(BUILD_DIR)
