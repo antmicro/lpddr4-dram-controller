@@ -52,6 +52,11 @@ else ifeq '$(VERILOG_TOP)' ''
 $(error Uknown project '$(PROJ)', please set 'VERILOG_TOP' to the verilog top file path)
 endif
 
+# Behavioral models for PDK standard cells
+VERILOG_LIBS=$(wildcard $(TP_ORFS_DIR)/flow/platforms/$(PDK)/work_around_yosys/*.v)
+# Post-implementation (ASIC) gate-level verilog netlist
+VERILOG_POST=$(RESULTS_DIR)/6_final.v
+
 verilog: $(VERILOG_TOP) ## Generate verilog sources
 
 $(VERILOG_TOP):
@@ -59,6 +64,9 @@ $(VERILOG_TOP):
 
 tests: $(VERILOG_TOP) ## Run tests in Verilator
 	$(MAKE) -C $(TEST_DIR) sim BUILD_DIR=$(BUILD_DIR)
+
+tests-gatelevel: $(GDS)
+	$(MAKE) -C $(TEST_DIR) sim BUILD_DIR=$(BUILD_DIR) VERILOG_SOURCES="$(VERILOG_POST) $(VERILOG_LIBS)"
 
 asic: $(GDS) ## Run ASIC flow
 

@@ -11,7 +11,7 @@ TOPLEVEL         = dram_ctrl
 TOPLEVEL_LANG    = verilog
 BUILD_DIR       ?= ../build/$(TOPLEVEL)
 
-VERILOG_SOURCES  = $(BUILD_DIR)/gateware/dram_ctrl.v
+VERILOG_SOURCES ?= $(BUILD_DIR)/gateware/dram_ctrl.v
 export CSR_CSV   = $(BUILD_DIR)/csr.csv
 
 SIM             ?= verilator
@@ -24,6 +24,7 @@ ifeq ($(SIM), verilator)
     COMPILE_ARGS += -Wno-WIDTHTRUNC
     COMPILE_ARGS += -Wno-CASEINCOMPLETE
     COMPILE_ARGS += -Wno-CMPCONST
+    COMPILE_ARGS += -Wno-fatal
 
     EXTRA_ARGS   += --trace --trace-structs
 endif
