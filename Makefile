@@ -24,8 +24,10 @@ THIRD_PARTY_DIR=$(ROOT_DIR)/third_party
 TP_ORFS_DIR=$(THIRD_PARTY_DIR)/OpenROAD-flow-scripts
 CONFIG?=$(SRC_DIR)/standalone-dfi.yml
 PDK?=sky130hd
+OBJECTS_DIR=$(TP_ORFS_DIR)/flow/objects/$(PDK)/$(PROJ)/base
 RESULTS_DIR=$(TP_ORFS_DIR)/flow/results/$(PDK)/$(PROJ)/base
 GDS=$(RESULTS_DIR)/6_final.gds
+VCD=tests/$(PDK)_power_analysis.vcd
 YOSYS_CMD?=$(shell command -v yosys)
 OPENROAD_EXE?=$(shell command -v openroad)
 OPENSTA_EXE?=$(shell command -v sta)
@@ -39,8 +41,7 @@ export ROOT_DIR
 export YOSYS_CMD
 export OPENROAD_EXE
 
-export PDK
-export TP_ORFS_DIR
+export OBJECTS_DIR
 export RESULTS_DIR
 
 # Determine verilog top file path based on project name
@@ -57,6 +58,10 @@ VERILOG_LIBS=$(wildcard $(TP_ORFS_DIR)/flow/platforms/$(PDK)/work_around_yosys/*
 # Post-implementation (ASIC) gate-level verilog netlist
 VERILOG_POST=$(RESULTS_DIR)/6_final.v
 
+# List of frequency and signal activity points for power analysis
+export FREQUENCY_LIST = 100.0 200.0
+export ACTIVITY_LIST  = 0.0 0.5 1.0
+
 verilog: $(VERILOG_TOP) ## Generate verilog sources
 
 $(VERILOG_TOP):
@@ -65,8 +70,11 @@ $(VERILOG_TOP):
 tests: $(VERILOG_TOP) ## Run tests in Verilator
 	$(MAKE) -C $(TEST_DIR) sim BUILD_DIR=$(BUILD_DIR)
 
-tests-gatelevel: $(GDS)
+$(VCD): $(GDS)
 	$(MAKE) -C $(TEST_DIR) sim BUILD_DIR=$(BUILD_DIR) VERILOG_SOURCES="$(VERILOG_POST) $(VERILOG_LIBS)"
+	cp tests/dump.vcd $@
+
+tests-gatelevel: $(VCD)
 
 asic: $(GDS) ## Run ASIC flow
 
@@ -79,23 +87,26 @@ drc: $(GDS) ## Run DRC phase for generated ASIC
 lvs: $(GDS) ## Run LVS phase for generated ASIC
 	$(MAKE) -C $(TP_ORFS_DIR)/flow DESIGN_CONFIG=$(ROOT_DIR)/openroad/${PROJ}/configs/${PDK}/config.mk lvs
 
-power-analysis:
-	bash opensta/run_sta.sh
+power-sweep: $(GDS) ## Run power analysis for different operating frequencies
+	$(OPENSTA_EXE) -exit opensta/power_sweep.tcl
 
-pwr-sweep: $(GDS) ## Run power analysis for different operating frequencies
-	$(OPENSTA_EXE) opensta/pwr_sweep.tcl
+power-vcd: $(VCD) ## Run power analysis for signal activities read from VCD
+	$(OPENSTA_EXE) -exit opensta/power_vcd.tcl
+
+power-analysis: power-sweep power-vcd
 
 clean: ## Remove generated verilog sources
-	$(RM) -r $(BUILD_DIR)
+	$(RM) -rf $(BUILD_DIR)
+	$(RM) -rf tests/*.vcd
+	$(RM) -rf tests/*.xml
 
 clean-asic: ## Remove generated ASIC files
-	$(RM) -r $(TP_ORFS_DIR)/flow/logs/$(PDK)/$(PROJ)
-	$(RM) -r $(TP_ORFS_DIR)/flow/results/$(PDK)/$(PROJ)
-	$(RM) -r $(TP_ORFS_DIR)/flow/objects/$(PDK)/$(PROJ)
-	$(RM) -r $(TP_ORFS_DIR)/flow/reports/$(PDK)/$(PROJ)
+	$(RM) -rf $(TP_ORFS_DIR)/flow/logs/$(PDK)/$(PROJ)
+	$(RM) -rf $(TP_ORFS_DIR)/flow/results/$(PDK)/$(PROJ)
+	$(RM) -rf $(TP_ORFS_DIR)/flow/objects/$(PDK)/$(PROJ)
+	$(RM) -rf $(TP_ORFS_DIR)/flow/reports/$(PDK)/$(PROJ)
 
-.PHONY: clean clean-asic verilog tests asic asic-drc asic-lvs
-
+.PHONY: clean clean-asic verilog tests tests-gatelevel asic asic-drc asic-lvs power-sweep power-vcd power-analysis
 
 
 .DEFAULT_GOAL := help

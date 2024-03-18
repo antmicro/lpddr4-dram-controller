@@ -26,7 +26,7 @@ ifeq ($(SIM), verilator)
     COMPILE_ARGS += -Wno-CMPCONST
     COMPILE_ARGS += -Wno-fatal
 
-    EXTRA_ARGS   += --trace --trace-structs
+    EXTRA_ARGS   += --trace --trace-structs --trace-underscore
 endif
 
 COCOTB_HDL_TIMEUNIT         = 1ns
