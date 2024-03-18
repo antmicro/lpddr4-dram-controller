@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+
 SHELL=/bin/bash
 
 ROOT_DIR=$(CURDIR)
@@ -26,6 +27,9 @@ PDK?=sky130hd
 GDS=$(TP_ORFS_DIR)/flow/results/$(PDK)/$(PROJ)/base/6_final.gds
 YOSYS_CMD?=$(shell command -v yosys)
 OPENROAD_EXE?=$(shell command -v openroad)
+
+# Include ORFS Makefile
+# include $(TP_ORFS_DIR)/flow/Makefile
 
 # Export variables for ASIC flow
 export PROJ
@@ -61,6 +65,9 @@ drc: $(GDS) ## Run DRC phase for generated ASIC
 lvs: $(GDS) ## Run LVS phase for generated ASIC
 	$(MAKE) -C $(TP_ORFS_DIR)/flow DESIGN_CONFIG=$(ROOT_DIR)/openroad/${PROJ}/configs/${PDK}/config.mk lvs
 
+power-analysis:
+	bash opensta/run_sta.sh
+
 clean: ## Remove generated verilog sources
 	$(RM) -r $(BUILD_DIR)
 
@@ -71,6 +78,8 @@ clean-asic: ## Remove generated ASIC files
 	$(RM) -r $(TP_ORFS_DIR)/flow/reports/$(PDK)/$(PROJ)
 
 .PHONY: clean clean-asic verilog tests asic asic-drc asic-lvs
+
+
 
 .DEFAULT_GOAL := help
 HELP_COLUMN_SPAN = 10
