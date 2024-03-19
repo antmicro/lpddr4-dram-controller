@@ -555,11 +555,11 @@ class BaseTest(uvm_test):
 
         # Check if the controller is initialized
         if cocotb.top.init_done.value != 1:
-            uvm_root().logger.log_critical("The controller did not initialize")
+            uvm_root().logger.critical("The controller did not initialize")
             assert False
 
         if cocotb.top.init_error.value != 0:
-            uvm_root().logger.log_critical("The controller reported initialization error")
+            uvm_root().logger.critical("The controller reported initialization error")
             assert False
 
         # Run the actual test
