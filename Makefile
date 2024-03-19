@@ -56,7 +56,7 @@ endif
 # Behavioral models for PDK standard cells
 VERILOG_LIBS=$(wildcard $(TP_ORFS_DIR)/flow/platforms/$(PDK)/work_around_yosys/*.v)
 # Post-implementation (ASIC) gate-level verilog netlist
-VERILOG_POST=$(RESULTS_DIR)/6_final.v
+VERILOG_POST=$(BUILD_DIR)/$(PDK)_post_impl.v
 
 # List of frequency and signal activity points for power analysis
 export FREQUENCY_LIST = 100.0 200.0
@@ -67,10 +67,14 @@ verilog: $(VERILOG_TOP) ## Generate verilog sources
 $(VERILOG_TOP):
 	python3 $(ROOT_DIR)/gen.py $(CONFIG) --output-dir $(BUILD_DIR) --name $(PROJ)
 
+$(VERILOG_POST): $(GDS)
+	# Use Yosys to prune unconnected cells (eg. fillers) from the final netlist.
+	$(YOSYS_CMD) -p "read_verilog $(RESULTS_DIR)/6_final.v; clean; write_verilog -noattr $@"
+
 tests: $(VERILOG_TOP) ## Run tests in Verilator
 	$(MAKE) -C $(TEST_DIR) sim BUILD_DIR=$(BUILD_DIR)
 
-$(VCD): $(GDS)
+$(VCD): $(VERILOG_POST)
 	$(MAKE) -C $(TEST_DIR) sim BUILD_DIR=$(BUILD_DIR) VERILOG_SOURCES="$(VERILOG_POST) $(VERILOG_LIBS)"
 	sed 's/$$scope module  $$end/$$scope module root $$end/g' tests/dump.vcd > $@ # FIXME: Need to fixup VCD $scope due to a limitaion of OpenSTA VCD parser.
 
