@@ -72,7 +72,7 @@ tests: $(VERILOG_TOP) ## Run tests in Verilator
 
 $(VCD): $(GDS)
 	$(MAKE) -C $(TEST_DIR) sim BUILD_DIR=$(BUILD_DIR) VERILOG_SOURCES="$(VERILOG_POST) $(VERILOG_LIBS)"
-	cp tests/dump.vcd $@
+	sed 's/$$scope module  $$end/$$scope module root $$end/g' tests/dump.vcd > $@ # FIXME: Need to fixup VCD $scope due to a limitaion of OpenSTA VCD parser.
 
 tests-gatelevel: $(VCD)
 
