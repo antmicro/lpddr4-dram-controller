@@ -56,7 +56,7 @@ endif
 # Behavioral models for PDK standard cells
 VERILOG_LIBS=$(wildcard $(TP_ORFS_DIR)/flow/platforms/$(PDK)/work_around_yosys/*.v)
 # Post-implementation (ASIC) gate-level verilog netlist
-VERILOG_POST=$(BUILD_DIR)/$(PDK)_post_impl.v
+VERILOG_POST=$(RESULTS_DIR)/6_final_clean.v
 
 # List of frequency and signal activity points for power analysis
 export FREQUENCY_LIST = 100.0 200.0
@@ -67,23 +67,23 @@ verilog: $(VERILOG_TOP) ## Generate verilog sources
 $(VERILOG_TOP):
 	python3 $(ROOT_DIR)/gen.py $(CONFIG) --output-dir $(BUILD_DIR) --name $(PROJ)
 
-$(VERILOG_POST): $(GDS)
-	# Use Yosys to prune unconnected cells (eg. fillers) from the final netlist.
-	$(YOSYS_CMD) -p "read_verilog $(RESULTS_DIR)/6_final.v; clean; write_verilog -noattr $@"
-
 tests: $(VERILOG_TOP) ## Run tests in Verilator
 	$(MAKE) -C $(TEST_DIR) sim BUILD_DIR=$(BUILD_DIR)
 
-$(VCD): $(VERILOG_POST)
+$(VCD): $(if $(CI),,$(VERILOG_POST))
 	$(MAKE) -C $(TEST_DIR) sim BUILD_DIR=$(BUILD_DIR) VERILOG_SOURCES="$(VERILOG_POST) $(VERILOG_LIBS)"
 	sed 's/$$scope module  $$end/$$scope module root $$end/g' tests/dump.vcd > $@ # FIXME: Need to fixup VCD $scope due to a limitaion of OpenSTA VCD parser.
 
 tests-gatelevel: $(VCD)
 
-asic: $(GDS) ## Run ASIC flow
+asic: $(VERILOG_POST) ## Run ASIC flow
 
 $(GDS): $(VERILOG_TOP)
 	$(MAKE) -C $(TP_ORFS_DIR)/flow DESIGN_CONFIG=$(ROOT_DIR)/openroad/${PROJ}/configs/${PDK}/config.mk
+
+$(VERILOG_POST): $(GDS)
+	# Use Yosys to prune unconnected cells (eg. fillers) from the final netlist.
+	$(YOSYS_CMD) -p "read_verilog $(RESULTS_DIR)/6_final.v; clean; write_verilog -noattr $@"
 
 drc: $(GDS) ## Run DRC phase for generated ASIC
 	$(MAKE) -C $(TP_ORFS_DIR)/flow DESIGN_CONFIG=$(ROOT_DIR)/openroad/${PROJ}/configs/${PDK}/config.mk drc
@@ -94,7 +94,7 @@ lvs: $(GDS) ## Run LVS phase for generated ASIC
 power-sweep: $(GDS) ## Run power analysis for different operating frequencies
 	$(OPENSTA_EXE) -exit opensta/power_sweep.tcl
 
-power-vcd: $(VCD) ## Run power analysis for signal activities read from VCD
+power-vcd: $(if $(CI),,$(VCD)) ## Run power analysis for signal activities read from VCD
 	$(OPENSTA_EXE) -exit opensta/power_vcd.tcl
 
 power-analysis: power-sweep power-vcd
