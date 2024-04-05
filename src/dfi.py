@@ -1,5 +1,5 @@
 # Copyright (c) 2015 Sebastien Bourdeauducq <sb@m-labs.hk>
-# Copyright (c) 2021-2023 Antmicro <www.antmicro.com>
+# Copyright (c) 2021-2024 Antmicro <www.antmicro.com>
 # SPDX-License-Identifier: BSD-2-Clause
 
 from migen import *

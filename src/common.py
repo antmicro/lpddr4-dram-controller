@@ -1,7 +1,7 @@
 # Copyright (c) 2016-2019 Florent Kermarrec <florent@enjoy-digital.fr>
 # Copyright (c) 2018 John Sully <john@csquare.ca>
 # Copyright (c) 2018 bunnie <bunnie@kosagi.com>
-# Copyright (c) 2020-2023 Antmicro <www.antmicro.com>
+# Copyright (c) 2020-2024 Antmicro <www.antmicro.com>
 # SPDX-License-Identifier: BSD-2-Clause
 
 import math

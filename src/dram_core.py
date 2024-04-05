@@ -1,5 +1,5 @@
 # Copyright (c) 2016-2019 Florent Kermarrec <florent@enjoy-digital.fr>
-# Copyright (c) 2023 Antmicro <www.antmicro.com>
+# Copyright (c) 2023-2024 Antmicro <www.antmicro.com>
 # SPDX-License-Identifier: BSD-2-Clause
 
 from migen import *

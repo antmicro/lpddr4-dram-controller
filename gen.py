@@ -2,7 +2,7 @@
 #
 # Copyright (c) 2018-2021 Florent Kermarrec <florent@enjoy-digital.fr>
 # Copyright (c) 2020 Stefan Schrijvers <ximin@ximinity.net>
-# Copyright (c) 2023 Antmicro <www.antmicro.com>
+# Copyright (c) 2023-2024 Antmicro <www.antmicro.com>
 # SPDX-License-Identifier: BSD-2-Clause
 
 import os
