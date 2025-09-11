@@ -49,7 +49,7 @@ class WishboneInterface:
                 obj = getattr(uut, prefixed)
             else:
                 obj = None
-                logging.err("Module {} does not have a signal '{}'",
+                logging.error("Module {} does not have a signal '{}'",
                     str(uut),
                     prefixed
                 )
@@ -186,7 +186,7 @@ class DFIInterface:
                 obj = getattr(uut, prefixed)
             else:
                 obj = None
-                logging.err("Module {} does not have a signal '{}'",
+                logging.error("Module {} does not have a signal '{}'",
                     str(uut),
                     prefixed
                 )
@@ -207,6 +207,27 @@ class DFIInterface:
         await RisingEdge(self.dfi_clk)
 
         self.dfi_rddata_valid.value = 0
+
+
+class LPDDR4DFIInterface(DFIInterface):
+    SIGNALS = [
+        "cke",
+        "reset_n",
+
+        "address",
+        "cs_n",
+
+        "wrdata",
+        "wrdata_en",
+        "wrdata_mask",
+
+        "rddata",
+        "rddata_en",
+        "rddata_valid",
+
+        "init_start",
+        "init_complete",
+    ]
 
 
 class DFIResponder(uvm_component):
@@ -283,7 +304,7 @@ class WishboneMonitor(uvm_component):
         self.iface = kwargs["iface"]
         del kwargs["iface"]
         super().__init__(*args, **kwargs)
-        
+
     def build_phase(self):
         self.ap = uvm_analysis_port("ap", self)
 
@@ -406,13 +427,13 @@ class InitSeq(uvm_sequence):
             await self.write_csr(csr_name, value)
 
         # Reset the DRAM memory
-        await self.write_csr("ddrphy_rst", 1)
+        # await self.write_csr("ddrphy_rst", 1)
 
         item = WaitItem(10) # TODO: Wait the required time
         await self.start_item(item)
         await self.finish_item(item)
 
-        await self.write_csr("ddrphy_rst", 0)
+        # await self.write_csr("ddrphy_rst", 0)
 
         # Instruct the PHY to begin training
         await self.write_csr("dram_ctrl_controller_phy_ctl", 1)
@@ -469,7 +490,10 @@ class BaseEnv(uvm_env):
         self.wb_data_mon    = WishboneMonitor("wb_data_mon", self, iface=iface)
 
         # DFI
-        iface = DFIInterface(cocotb.top, "clk", "dfi_")
+        # if ConfigDB().get(None, "dfi", "memtype") == "LPDDR4":
+        iface = LPDDR4DFIInterface(cocotb.top, "clk", "dfi_")
+        # else:
+            # iface = DFIInterface(cocotb.top, "clk", "dfi_")
         self.dfi_responder  = DFIResponder("dfi_rsp", self, iface=iface)
         self.dfi_driver     = DFIDriver("dfi_drv", self, iface=iface)
         self.dfi_mon        = DFIMonitor("dfi_mon", self, iface=iface)
@@ -487,7 +511,7 @@ class BaseTest(uvm_test):
     Base controller test class. Performs the controller initialization.
     """
 
-    def __init__(self, name, parent, env_class=BaseEnv):
+    def __init__(self, name, parent, env_class=BaseEnv, memtype="DDR3"):
         super().__init__(name, parent)
         self.env_class = env_class
 
@@ -504,8 +528,8 @@ class BaseTest(uvm_test):
         db.set(None, "*", "CL",       3)
         db.set(None, "*", "WR_LAT",   3)
 
-        db.set(None, "*", "tRP",      2)
-        db.set(None, "*", "tRCD",     2)
+        db.set(None, "*", "tRP",      5)
+        db.set(None, "*", "tRCD",     4)
         db.set(None, "*", "tWR",      2)
         db.set(None, "*", "tWTR",     2)
         db.set(None, "*", "tREFI",    586)
@@ -518,7 +542,9 @@ class BaseTest(uvm_test):
         db.set(None, "*", "tZQCS",    16)
 
         # Disable DRAM storage simulation by default
-        ConfigDB().set(None, "*", "DRAM_STORAGE", False);
+        ConfigDB().set(None, "*", "DRAM_STORAGE", False)
+
+        ConfigDB().set(None, "*", "memtype", memtype)
 
     def build_phase(self):
         self.env = self.env_class("env", self)

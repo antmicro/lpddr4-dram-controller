@@ -24,7 +24,7 @@ class PHYNone(Module, AutoCSR):
         sys_clk_freq    = 100e6,
         nphases         = 4,
         ratio           = 4,
-        addressbits     = 17,
+        addressbits     = None,
         databits        = 32,
         bankbits        = 6,
         nranks          = 1,
@@ -44,15 +44,16 @@ class PHYNone(Module, AutoCSR):
         tck = 2/(2*ratio*sys_clk_freq)
 
         # Set address and bank bits for certain DDR types
-        if memtype == "LPDDR4":
-            addressbits = 17
-            bankbits    = 6
-        elif memtype == "DDR5":
-            addressbits = 18
-            bankbits    = 8
-        elif memtype == "LDDR5":
-            addressbits = 18
-            bankbits    = 7
+        if addressbits is None:
+            if memtype == "LPDDR4":
+                addressbits = 17
+                bankbits    = 6
+            elif memtype == "DDR5":
+                addressbits = 18
+                bankbits    = 8
+            elif memtype == "LDDR5":
+                addressbits = 18
+                bankbits    = 7
 
         self.memtype        = memtype
         self.nphases        = nphases

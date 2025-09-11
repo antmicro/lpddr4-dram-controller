@@ -6,10 +6,17 @@
 # SPDX-License-Identifier: BSD-2-Clause
 
 import os
+from string import digits
+import string
 import sys
+from typing import Sequence
+
+from litedram.phy.utils import CommandsPipeline
+
 filepath = os.path.join(os.path.dirname(os.path.abspath(__file__)), "src")
 sys.path.append(filepath)
 
+from litedram.phy.lpddr4.commands import DFIPhaseAdapter
 import yaml
 import argparse
 import inspect
@@ -29,6 +36,7 @@ from litedram.frontend.wishbone import *
 from litedram import modules as litedram_modules
 from litedram.core.controller import ControllerSettings
 
+from dfi import Interface
 from dram_core import DRAMCore
 from dram_phy  import PHYNone
 
@@ -476,30 +484,173 @@ class DRAMCoreSoC(LiteXSoC):
             else:
                 raise ValueError("Unsupported port type: {}".format(port["type"]))
 
-    def expose_dfi(self, platform, dfi):
+    def expose_dfi(self, platform, dfi: Interface):
         """
         Exposes the provided DFI interface by creating a platform extension with
         pads that match the DFI. Connects DFI to the pads
         """
 
+        #: Set of DFI signals common to all DRAMs + LPDDR4 specific ones
+        #: for utilized DFI interface groups
+        LPDDR4_DFI_SIGS_PFX = {
+            # Control Interface
+            "address", "cs", "cs_n", "cke", "reset_n",
+            # Write data Interface
+            "wrdata_en", "wrdata", "wrdata_cs", "wrdata_mask",
+            # Read data Interface
+            "rddata_en", "rddata", "rddata_cs", "rddata_valid", "rddata_dbi",
+            # Update Interface
+            "ctrlupd_req", "ctrlupd_ack", "phyupd_req", "phyupd_type", "phyupd_ack",
+            # Status Interface
+            "dram_clk_disable", "init_start", "init_complete", "frequency",
+            # Other Interfaces from the spec are not supported anyways
+        } # fmt: skip
+
         # Add DFI pads
         extension = ["dfi", 0]
         for name, signal in dfi.get_standard_names():
             name = name.replace("dfi_", "")
+            if self.ddrphy.memtype == "LPDDR4":
+                # Filter out non-LPDDR4 DFI signals
+                sfx: str = name.split('_')[-1]
+                namec = name
+                if len(sfx) > 1 and sfx[0] in ['p', 'w', 'a'] and all(d in string.digits for d in sfx[1:]):
+                    namec = '_'.join(name.split('_')[:-1])
+                if namec not in LPDDR4_DFI_SIGS_PFX:
+                    continue
+                if namec == "address":
+                    signal = Signal(6)
             extension.append(Subsignal(name, Pins(len(signal))))
         platform.add_extension([tuple(extension)])
 
         # Connect DFI pads
         pads = platform.request("dfi")
-        for name, signal in dfi.get_standard_names(s2m=False):
-            name = name.replace("dfi_", "")
-            pad = getattr(pads, name)
-            self.comb += pad.eq(signal)
+        if self.ddrphy.memtype != "LPDDR4":
+            for name, signal in dfi.get_standard_names(s2m=False):
+                name = name.replace("dfi_", "")
+                pad = getattr(pads, name, None)
+                if pad is not None:
+                    self.comb += pad.eq(signal)
 
-        for name, signal in dfi.get_standard_names(m2s=False):
-            name = name.replace("dfi_", "")
-            pad = getattr(pads, name)
-            self.comb += signal.eq(pad)
+            for name, signal in dfi.get_standard_names(m2s=False):
+                name = name.replace("dfi_", "")
+                pad = getattr(pads, name, None)
+                if pad is not None:
+                    self.comb += signal.eq(pad)
+        else:
+            # For each phase translate DDR4 commands on RAS, CAS, WE
+            # # into LPDDR4 CA[5:0] and CS signals
+            self.submodules.spreader = Ddr4ToLpddr4DfiTranslator(dfi.phases)
+
+            # self.submodules.cmdpipe = CommandsPipeline(adapters,
+                # cs_ser_width=len(dfi.phases),
+                # ca_ser_width=len(dfi.phases),
+                # ca_nbits=6,
+                # cmd_nphases_span=len(dfi.phases),
+                # extended_overlaps_check=False
+            # )
+
+            phs = len(dfi.phases)
+            for p in range(phs):
+                ca_pad = getattr(pads, f"address_p{p}" if phs > 1 else "address")
+                # FIXME: There isn't actually a cs_n signal defined
+                # anywhere in the DFI spec, it should just be "cs".
+                # But this is something that should be fixed in the
+                # entire litedram repo.
+                cs_pad = getattr(pads, f"cs_n_p{p}" if phs > 1 else "cs_n")
+                self.comb += [
+                    ca_pad.eq(self.spreader.ca[p]),
+                    cs_pad.eq(self.spreader.cs[p])
+                ]
+
+            for name, signal in dfi.get_standard_names(s2m=False):
+                if "address" in name or "cs_n" in name:
+                    continue
+                name = name.replace("dfi_", "")
+                pad = getattr(pads, name, None)
+                if pad is not None:
+                    self.comb += pad.eq(signal)
+
+            for name, signal in dfi.get_standard_names(m2s=False):
+                name = name.replace("dfi_", "")
+                pad = getattr(pads, name, None)
+                if pad is not None:
+                    self.comb += signal.eq(pad)
+
+class Ddr4ToLpddr4DfiTranslator(Module):
+    """
+    This module takes an array of DDR4 DFI phases,
+    each one translating DDR4 commands on `dfi_ras_n`, `dfi_cas_n` and `dfi_wr_n` into
+    LPDDR4 CA/CS bus commands on `dfi_address` and `dfi_cs` and inserts them into
+    new, translated DFI phases.
+    """
+
+    def __init__(self, dfi_phases: Sequence[Record]):
+        phases = len(dfi_phases)
+        assert phases != 0
+
+        self.cs = [Signal() for _ in range(phases)]
+        self.ca = [Signal(6) for _ in range(phases)]
+        self.ready = Signal(reset=1)
+
+        self.error = Signal() # and error state was reached
+
+        # # #
+
+        adapters = [DFIPhaseAdapter(p) for p in dfi_phases]
+        self.submodules += adapters
+
+        # 1. nothing ever happens
+        # 2. a valid signal was asserted on DFI phase adapter X
+        #       ; mark a start of a command
+        #       ; this should hold a lock, no other commands
+        #       must be processed before this one is finished
+        #
+        # 3. start transmitting the translated command, starting on phase 0
+        #       1 phase => [2 or 4] MC cycles
+        #       2 phase => [1 or 2] MC cycles
+        #     >=4 phase => [1]      MC cycles
+        #
+        # 4. drop lock, goto 1
+
+        # Clear error after one cycle
+        self.sync += If(self.error, self.error.eq(0))
+
+        # While processing an issued command, another command was
+        # submitted on any DFI phase
+        self.sync += If(~self.ready & Cat(a.valid for a in adapters) != 0,
+                        self.error.eq(1))
+
+        cycle = Signal(max=4)
+        ca_stages = Array((Signal(6, name=f"CA_STAGE_{i}") for i in range(4)))
+        cs_stages = Array((Signal(name=f"CS_STAGE_{i}") for i in range(4)))
+
+        zero_stmts = []
+        cmd_stmts  = []
+        for i in range(phases):
+            zero_stmts += [self.cs[i].eq(0), self.ca[i].eq(0)]
+            cmd_stmts += [
+                self.cs[i].eq(cs_stages[i + cycle * phases]),
+                self.ca[i].eq(ca_stages[i + cycle * phases])
+            ]
+
+        self.comb += If(~self.ready, *cmd_stmts).Else(*zero_stmts)
+
+        for i, ada in enumerate(adapters):
+            self.sync += If(ada.valid & self.ready,
+                self.ready.eq(0),
+                *(ca_stages[i].eq(Array(ada.ca)[i]) for i in range(4)),
+                *(cs_stages[i].eq(Array(ada.cs)[i]) for i in range(4)),
+            )
+
+        self.sync += [
+            If(~self.ready, cycle.eq(cycle+1)),
+            If(cycle == (3 if phases == 1 else 1 if phases == 2 else 0),
+                self.ready.eq(1),
+                cycle.eq(0)
+            )
+        ]
+
 
 # Build --------------------------------------------------------------------------------------------
 

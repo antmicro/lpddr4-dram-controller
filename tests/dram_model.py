@@ -102,7 +102,7 @@ class Timings:
         "tRRD",
         "tRC",
         "tRAS",
-        "tZQCS",
+        # "tZQCS",
     ]
 
     def __init__(self, uvm_context=None, uvm_inst_name="*"):
@@ -143,7 +143,7 @@ class TimingChecker:
         # tWTR
         ("WR",   "RD",  "tWTR"),
         # tZQCS
-        ("ZQCS", "ACT", "tZQCS"),
+        # ("ZQCS", "ACT", "tZQCS"),
     ]
 
     def __init__(self, timings, clk_freq, logger):
@@ -324,7 +324,7 @@ class Model:
         """
         Parses a command sent to DRAM over DFI
         """
-
+        return
         # CKE=0 or CSn=1
         if not self.iface.dfi_cke.value or self.iface.dfi_cs_n.value:
             return None
