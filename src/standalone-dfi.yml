@@ -11,7 +11,7 @@
     "sdram_module":     "MT53E256M16D1",  # SDRAM modules of the board or SO-DIMM
     # "memtype":          "DDR3",        # DRAM type
     # "sdram_module":     "DDR3Module",  # SDRAM modules of the board or SO-DIMM
-    "sdram_data_nb":    32,            # Number of data bits
+    "sdram_data_nb":    8,            # Number of data bits
     "sdram_module_nb":  2,             # Number of byte groups
     "sdram_rank_nb":    1,             # Number of ranks
     "sdram_ratio":      2,
@@ -22,7 +22,7 @@
 
     # DFI ----------------------------------------------------------------------
     # Override DFI address and bank widths
-    "dfi_nphases":      4,
+    "dfi_nphases":      1,
     "dfi_addressbits":  17,
     "dfi_bankbits":     6,
 

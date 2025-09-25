@@ -13,6 +13,8 @@ from typing import Sequence
 
 from litedram.phy.utils import CommandsPipeline
 
+from third_party.litedram.litedram.phy.utils import delayed
+
 filepath = os.path.join(os.path.dirname(os.path.abspath(__file__)), "src")
 sys.path.append(filepath)
 
@@ -542,14 +544,6 @@ class DRAMCoreSoC(LiteXSoC):
             # # into LPDDR4 CA[5:0] and CS signals
             self.submodules.spreader = Ddr4ToLpddr4DfiTranslator(dfi.phases)
 
-            # self.submodules.cmdpipe = CommandsPipeline(adapters,
-                # cs_ser_width=len(dfi.phases),
-                # ca_ser_width=len(dfi.phases),
-                # ca_nbits=6,
-                # cmd_nphases_span=len(dfi.phases),
-                # extended_overlaps_check=False
-            # )
-
             phs = len(dfi.phases)
             for p in range(phs):
                 ca_pad = getattr(pads, f"address_p{p}" if phs > 1 else "address")
@@ -566,7 +560,10 @@ class DRAMCoreSoC(LiteXSoC):
             for name, signal in dfi.get_standard_names(s2m=False):
                 if "address" in name or "cs_n" in name:
                     continue
+                # FIXME: DON'T HARDCODE 5 DELAY
                 name = name.replace("dfi_", "")
+                if name in ["rddata_en", "wrdata", "wrdata_en", "wrdata_mask", "wrdata_cs", "rddata_cs"]:
+                    signal = delayed(self, signal, 5)
                 pad = getattr(pads, name, None)
                 if pad is not None:
                     self.comb += pad.eq(signal)
@@ -597,7 +594,7 @@ class Ddr4ToLpddr4DfiTranslator(Module):
 
         # # #
 
-        adapters = [DFIPhaseAdapter(p) for p in dfi_phases]
+        adapters = [DFIPhaseAdapter(p, masked_write=False) for p in dfi_phases]
         self.submodules += adapters
 
         # 1. nothing ever happens

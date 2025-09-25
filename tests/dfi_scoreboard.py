@@ -37,9 +37,13 @@ class DFIScoreboard(uvm_component):
 
         # Build DRAM address
         # TODO: Parametrize / extract this data somehow
-        row_nb = 13
+        # row_nb = 13
+        # col_nb = 10
+        # bank_nb = 3
+        row_nb = 15
         col_nb = 10
         bank_nb = 3
+        burst_len = 16
 
         row_mask  = (1 << row_nb ) - 1
         col_mask  = (1 << col_nb ) - 1
@@ -52,12 +56,7 @@ class DFIScoreboard(uvm_component):
         dram_addr  = (row  << (col_nb + bank_nb)) | \
                      (bank << (col_nb)) | col
 
-        # FIXME: The controller address alignment for DDR3 is fixed to 8. This
-        # may not work for all DRAM to MC clock ratios but for now lets keep
-        # it fixed.
-        address_alignment = 8
-
-        return dram_addr // address_alignment
+        return dram_addr // burst_len
 
     def check_items(self, bus_item, dfi_item):
         """
@@ -71,13 +70,13 @@ class DFIScoreboard(uvm_component):
             )
             check = False
 
-        if dfi_item.data.n_bits not in [32, 64]:
+        if len(dfi_item.data.range) not in [32, 64]:
             self.logger.critical("Unsupported DFI data width {}",
                 dfi_item.data.n_bits
             )
             check = False
 
-        ratio = dfi_item.data.n_bits / bus_item.data.n_bits
+        ratio = len(dfi_item.data.range) / bus_item.data.n_bits
         if ratio  not in [1.0, 2.0]:
             self.logger.critical(
                 "Unsupported bus to DFI data ratio 1:{}".format(ratio)
@@ -135,7 +134,7 @@ class WriteScoreboard(DFIScoreboard):
                 check = False
 
             # Get data word being written
-            if dfi_item.data.n_bits == 64:
+            if len(dfi_item.data.range) == 64:
                 if dfi_item.mask == 0x0F:
                     word = 1
                 elif dfi_item.mask == 0xF0:
@@ -149,7 +148,7 @@ class WriteScoreboard(DFIScoreboard):
                     )
                     check = False
 
-            elif dfi_item.data.n_bits == 32:
+            elif len(dfi_item.data.range) == 32:
                 if dfi_item.mask == 0x0:
                     word = 0
                 else:
@@ -172,12 +171,12 @@ class WriteScoreboard(DFIScoreboard):
 
             # Build word address from DRAM address. Accomodate for the DFI to
             # Wishbone bus ratio.
-            ratio = dfi_item.data.n_bits // bus_item.data.n_bits
+            ratio = len(dfi_item.data.range) // bus_item.data.n_bits
             word_addr  = self.decode_dram_address(dfi_item) << (ratio - 1)
             word_addr |= word
 
             # Get the 32-bit data word being written
-            word_data  = (dfi_item.data >> (32 * word)) & 0xFFFFFFFF
+            word_data  = (dfi_item.data.integer >> (32 * word)) & 0xFFFFFFFF
 
             msg = "bus={:08X}:{:08X} vs. dfi={:08X}:{:08X}, bank={} row=0x{:04X} col=0x{:04X} mask=0x{:02X}".format(
                 bus_item.addr,
@@ -255,10 +254,10 @@ class ReadScoreboard(DFIScoreboard):
             # Extract the correct 32-bit word from DFI data. Use lower bit(s)
             # from the bus read request to tell which word to take from the
             # DFI bus
-            ratio = dfi_item.data.n_bits // bus_item.data.n_bits
+            ratio = len(dfi_item.data.range) // bus_item.data.n_bits
 
             word_addr = dram_addr << (ratio - 1)
-            word_data = int(dfi_item.data)
+            word_data = dfi_item.data.integer
 
             if ratio > 1:
                 word = int(bus_item.addr) % ratio
@@ -270,7 +269,7 @@ class ReadScoreboard(DFIScoreboard):
                 bus_item.addr,
                 int(bus_item.data),
                 dram_addr,
-                int(dfi_item.data),
+                dfi_item.data.integer,
                 dfi_item.bank,
                 dfi_item.row,
                 dfi_item.col

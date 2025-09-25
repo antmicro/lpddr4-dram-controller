@@ -6,7 +6,6 @@ Main testbench module for the DRAM controller. Provides various utilities and
 pyuvm components used by the tests.
 """
 
-import pyuvm
 from pyuvm import *
 
 from cocotb.clock import Clock
@@ -18,8 +17,9 @@ import logging
 from common import BusReadItem, BusRandomReadItem, DRAMReadItem, \
                    BusWriteItem, BusRandomWriteItem, WaitItem
 
-from dram_model import Model, Timings
+from dram_model import Timings
 from csr import load_csrs
+from lpddr4_model import LPDDR4Model
 
 # =============================================================================
 
@@ -344,7 +344,7 @@ class DFIMonitor(uvm_component):
 
         # Instantiate a PHY+DRAM model
         storage = ConfigDB().get(self, "", "DRAM_STORAGE") != 0
-        self.dram = Model(self.iface, self.logger, with_storage=storage)
+        self.dram = LPDDR4Model(self.iface, self.logger, with_storage=storage)
 
     def build_phase(self):
         self.ap = uvm_analysis_port("ap", self)

@@ -85,7 +85,7 @@ class DRAMWriteItem(uvm_sequence_item):
     def __init__(self, bank, row, col, data, mask):
         super().__init__(
             "WR:{:02X}_{:04X}_{:03X}_{:016X}_{:02X}".format(
-                bank, row, col, int(data), int(mask)
+                bank, row, col, data.integer, int(mask)
             )
         )
         self.bank = bank
@@ -102,7 +102,7 @@ class DRAMReadItem(uvm_sequence_item):
 
     def __init__(self, bank, row, col, data):
         super().__init__(
-            "RD:{:02X}_{:04X}_{:03X}_{:016X}".format(bank, row, col, int(data))
+            "RD:{:02X}_{:04X}_{:03X}_{:016X}".format(bank, row, col, data.integer)
         )
         self.bank = bank
         self.row = row
