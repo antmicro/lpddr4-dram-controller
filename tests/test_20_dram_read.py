@@ -119,13 +119,13 @@ class TestReadEnv(BaseEnv):
         self.read_scoreboard = ReadScoreboard("read_scoreboard", self)
 
         # Set sequencer to be used by read sequences
-        ConfigDB().set(None, "*", "SEQR", self.wb_data_seqr);
+        ConfigDB().set(None, "*", "SEQR", self.data_seqr);
 
     def connect_phase(self):
         super().connect_phase()
 
         # Scoreboard
-        self.wb_data_mon.ap.connect(self.read_scoreboard.bus_fifo.analysis_export)
+        self.data_mon.ap.connect(self.read_scoreboard.bus_fifo.analysis_export)
         self.dfi_mon.ap.connect(self.read_scoreboard.dfi_fifo.analysis_export)
 
 # =============================================================================
@@ -145,7 +145,7 @@ class TestRandomRead(BaseTest):
         self.seq = RandomReadSeq.create("read")
 
     async def run(self):
-        await self.seq.start(self.env.wb_data_seqr)
+        await self.seq.start(self.env.data_seqr)
 
 
 @pyuvm.test()
@@ -162,7 +162,7 @@ class TestSequentialRead(BaseTest):
         self.seq = SequentialReadSeq.create("read")
 
     async def run(self):
-        await self.seq.start(self.env.wb_data_seqr)
+        await self.seq.start(self.env.data_seqr)
 
 
 @pyuvm.test()
@@ -179,5 +179,5 @@ class TestBurstRead(BaseTest):
         self.seq = BurstReadSeq.create("read")
 
     async def run(self):
-        await self.seq.start(self.env.wb_data_seqr)
+        await self.seq.start(self.env.data_seqr)
 

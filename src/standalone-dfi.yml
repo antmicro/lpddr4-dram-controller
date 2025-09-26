@@ -9,8 +9,6 @@
     # Changing the memtype doesn't seem to do much unfortunately
     "memtype":          "LPDDR4",        # DRAM type
     "sdram_module":     "MT53E256M16D1",  # SDRAM modules of the board or SO-DIMM
-    # "memtype":          "DDR3",        # DRAM type
-    # "sdram_module":     "DDR3Module",  # SDRAM modules of the board or SO-DIMM
     "sdram_data_nb":    8,            # Number of data bits
     "sdram_module_nb":  2,             # Number of byte groups
     "sdram_rank_nb":    1,             # Number of ranks
@@ -35,8 +33,9 @@
 
     # User Ports ---------------------------------------------------------------
     "user_ports": {
-        "wishbone_0" : {
-            "type":                 "wishbone",
+        "axi" : {
+            "type":                 "axi",
+            "id_width":             1,
             "data_width":           32,
             "block_until_ready":    True,
         },

@@ -274,11 +274,7 @@ class TimingChecker:
         if delay < expected:
             self.logger.error(
                 "%s timing violation between %s and %s. Should be >=%f but is %f",
-                timing.name,
-                cmd1,
-                cmd2,
-                expected,
-                delay,
+                timing.name, cmd1, cmd2, expected, delay
             )
             self.passed = False
 
@@ -291,8 +287,7 @@ class TimingChecker:
             except TimingRule.NonUniqueError as e:
                 self.logger.error(
                     "%s timing violation after %s. This rule requires event uniqueness.",
-                    e.rule.timing.name,
-                    e.rule.lefts[0],
+                    e.rule.timing.name, e.rule.lefts[0]
                 )
                 self.passed = False
 

@@ -49,7 +49,6 @@ jobs:
           sudo apt -qqy install --no-install-recommends git nodejs
 
       - name: Install Verilator prerequisities
-        if: ${{ steps.cache.outputs.cache-hit != 'true' }}
         run: |
           sudo apt -qqy update && sudo apt -qqy --no-install-recommends install \
           autoconf automake autotools-dev \

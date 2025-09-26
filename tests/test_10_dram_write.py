@@ -129,13 +129,13 @@ class TestWriteEnv(BaseEnv):
         self.write_scoreboard = WriteScoreboard("write_scoreboard", self)
 
         # Set sequencer to be used by write sequences
-        ConfigDB().set(None, "*", "SEQR", self.wb_data_seqr);
+        ConfigDB().set(None, "*", "SEQR", self.data_seqr);
 
     def connect_phase(self):
         super().connect_phase()
 
         # Scoreboard
-        self.wb_data_mon.ap.connect(self.write_scoreboard.bus_fifo.analysis_export)
+        self.data_mon.ap.connect(self.write_scoreboard.bus_fifo.analysis_export)
         self.dfi_mon.ap.connect(self.write_scoreboard.dfi_fifo.analysis_export)
 
 # =============================================================================
@@ -155,7 +155,7 @@ class TestRandomWrite(BaseTest):
         self.seq = RandomWriteSeq.create("write")
 
     async def run(self):
-        await self.seq.start(self.env.wb_data_seqr)
+        await self.seq.start(self.env.data_seqr)
 
 
 @pyuvm.test()
@@ -172,7 +172,7 @@ class TestSequentialWrite(BaseTest):
         self.seq = SequentialWriteSeq.create("write")
 
     async def run(self):
-        await self.seq.start(self.env.wb_data_seqr)
+        await self.seq.start(self.env.data_seqr)
 
 
 @pyuvm.test()
@@ -189,4 +189,4 @@ class TestBurstWrite(BaseTest):
         self.seq = BurstWriteSeq.create("write")
 
     async def run(self):
-        await self.seq.start(self.env.wb_data_seqr)
+        await self.seq.start(self.env.data_seqr)

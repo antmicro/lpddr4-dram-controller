@@ -6,10 +6,12 @@ Main testbench module for the DRAM controller. Provides various utilities and
 pyuvm components used by the tests.
 """
 
+from typing import Optional
 from pyuvm import *
 
 from cocotb.clock import Clock
 from cocotb.triggers import RisingEdge, FallingEdge
+from cocotb.binary import BinaryValue
 
 import os
 import logging
@@ -57,7 +59,7 @@ class WishboneInterface:
 
         # Get the clock
         obj = getattr(uut, clk)
-        setattr(self, "wb_clk", obj)
+        setattr(self, "clk", obj)
 
         # Internals
         self.timeout_cycles = 100 # FIXME: Arbitrary
@@ -67,7 +69,7 @@ class WishboneInterface:
         Single 32-bit write
         """
 
-        await RisingEdge(self.wb_clk)
+        await RisingEdge(self.clk)
 
         self.wb_adr.value   = addr >> 2
         self.wb_dat_w.value = data
@@ -77,7 +79,7 @@ class WishboneInterface:
         self.wb_we.value    = 1
 
         for i in range(self.timeout_cycles):
-            await RisingEdge(self.wb_clk)
+            await RisingEdge(self.clk)
             if self.wb_ack.value == 1:
                 break
         else:
@@ -93,7 +95,7 @@ class WishboneInterface:
         Single 32-bit read
         """
 
-        await RisingEdge(self.wb_clk)
+        await RisingEdge(self.clk)
 
         self.wb_adr.value   = addr >> 2
         self.wb_sel.value   = 0xF
@@ -102,7 +104,7 @@ class WishboneInterface:
         self.wb_we.value    = 0
 
         for i in range(self.timeout_cycles):
-            await RisingEdge(self.wb_clk)
+            await RisingEdge(self.clk)
             if self.wb_ack.value == 1:
                 break
         else:
@@ -116,10 +118,134 @@ class WishboneInterface:
         return self.wb_dat_r.value
 
 
-class WishboneDriver(uvm_driver):
+class AxiLInterface:
+    SIGNALS = [
+        "awvalid",
+        "awready",
+        "awaddr",
+        "wvalid",
+        "wready",
+        "wdata",
+        "wstrb",
+        "bvalid",
+        "bready",
+        "bresp",
+        "arvalid",
+        "arready",
+        "araddr",
+        "rvalid",
+        "rready",
+        "rresp",
+        "rdata",
+    ]
+
+    def __init__(self, uut, clk, pfx=""):
+        # Collect Axil signals
+        for sig in self.SIGNALS:
+            prefixed = pfx + sig
+            if hasattr(uut, prefixed):
+                obj = getattr(uut, prefixed)
+            else:
+                obj = None
+                logging.error("Module {} does not have a signal '{}'",
+                    str(uut),
+                    prefixed
+                )
+            setattr(self, sig, obj)
+
+        # Get the clock
+        obj = getattr(uut, clk)
+        setattr(self, "clk", obj)
+
+        # Internals
+        self.timeout_cycles = 100 # FIXME: Arbitrary
+
+        self.wstrb.value = 0xF
+        self.bready.value = 1
+        self.rready.value = 1
+
+    async def write(self, addr, data):
+        """
+        Single 32-bit write
+        """
+
+        self.awaddr.value = addr
+        self.awvalid.value = 1
+        self.wdata.value = data
+        self.wvalid.value = 1
+
+        for _ in range(self.timeout_cycles):
+            await RisingEdge(self.clk)
+            if self.awready.value == 1:
+                self.awvalid.value = 0
+            if self.wready.value == 1:
+                self.wvalid.value = 0
+            if (self.awvalid.value | self.wvalid.value) == 0:
+                break
+        else:
+            uvm_root().logger.critical("AXI-Lite bus handshake timeout on write")
+            assert False
+
+        self.awaddr.value = self.wdata.value = 0
+
+        for _ in range(self.timeout_cycles):
+            if self.bvalid.value == 1:
+                if self.bresp.value != 0:
+                    uvm_root().logger.critical("AXI-Lite error response to write: %d", self.bresp.value)
+                    assert False
+                return
+            await RisingEdge(self.clk)
+        else:
+            uvm_root().logger.critical("AXI-Lite bus handshake timeout on write response")
+            assert False
+
+
+    async def read(self, addr):
+        """
+        Single 32-bit read
+        """
+
+        self.araddr.value = addr
+        self.arvalid.value = 1
+
+        for _ in range(self.timeout_cycles):
+            await RisingEdge(self.clk)
+            if self.arready.value == 1:
+                self.arvalid.value = self.araddr.value = 0
+            if self.rvalid.value == 1:
+                break
+        else:
+            uvm_root().logger.critical("AXI-Lite bus handshake timeout on read")
+            assert False
+
+        if self.rresp.value != 0:
+            uvm_root().logger.critical("AXI-Lite error read response: %d", self.rresp.value)
+            assert False
+
+        return self.rdata.value
+
+
+class AxiInterface(AxiLInterface):
+    SIGNALS = AxiLInterface.SIGNALS + [
+        "awprot",
+        "awsize",
+        "arprot",
+        "arsize",
+        "wlast",
+    ]
+
+    def __init__(self, uut, clk, pfx=""):
+        super().__init__(uut, clk, pfx)
+
+        self.awprot.value = self.arprot.value = 0
+        self.awsize.value = 0b10
+        self.wlast.value = 1
+
+
+class BusDriver(uvm_driver):
     """
-    Wishbone bus driver. Receives transfers from a sequencers and execures
-    them using the interface (BFM).
+    Bus driver (common to both Wishbone and AXI interface implementations).
+    Receives transfers from sequencers and executes them using the interface (BFM).
     """
 
     def __init__(self, *args, **kwargs):
@@ -137,7 +263,7 @@ class WishboneDriver(uvm_driver):
                 it.data = await self.iface.read(it.addr)
             elif isinstance(it, WaitItem):
                 for i in range(it.cycles):
-                    await RisingEdge(self.iface.wb_clk)
+                    await RisingEdge(self.iface.clk)
             else:
                 raise RuntimeError("Unknown item '{}'".format(type(it)))
 
@@ -311,7 +437,7 @@ class WishboneMonitor(uvm_component):
     async def run_phase(self):
         while True:
 
-            await RisingEdge(self.iface.wb_clk)
+            await RisingEdge(self.iface.clk)
 
             # Transaction
             if self.iface.wb_cyc.value:
@@ -330,6 +456,46 @@ class WishboneMonitor(uvm_component):
                         data = self.iface.wb_dat_r.value
                         self.logger.debug("read  0x{:08X} -> 0x{:08X}".format(addr, int(data)))
                         self.ap.write(BusReadItem(addr, data))
+
+class AxiLMonitor(uvm_component):
+    def __init__(self, *args, **kwargs):
+        self.iface = kwargs["iface"]
+        del kwargs["iface"]
+        super().__init__(*args, **kwargs)
+
+        self.pending_aw: Optional[int] = None
+        self.pending_ar: Optional[int] = None
+        self.pending_w: Optional[BinaryValue] = None
+
+    def build_phase(self):
+        self.ap = uvm_analysis_port("ap", self)
+
+    async def run_phase(self):
+        while True:
+            await RisingEdge(self.iface.clk)
+
+            if self.iface.awvalid.value and self.pending_aw is None:
+                self.pending_aw = int(self.iface.awaddr.value)
+
+            if self.iface.wvalid.value and self.pending_w is None:
+                assert self.iface.wstrb.value == 0xf, "AXI write strobe ignored in the monitor"
+                self.pending_w = self.iface.wdata.value
+
+            if self.iface.arvalid.value and self.pending_ar is None:
+                self.pending_ar = int(self.iface.araddr.value)
+
+            if self.iface.rvalid.value:
+                assert self.pending_ar is not None, (
+                    "AXI RVALID asserted, but there was no read requested"
+                )
+                data = self.iface.rdata.value
+                self.ap.write(BusReadItem(self.pending_ar, data))
+                self.pending_ar = None
+
+            if self.pending_aw is not None and self.pending_w is not None:
+                self.ap.write(BusWriteItem(self.pending_aw, self.pending_w))
+                self.pending_aw = None
+                self.pending_w = None
 
 
 class DFIMonitor(uvm_component):
@@ -471,23 +637,23 @@ class InitSeq(uvm_sequence):
 
 class BaseEnv(uvm_env):
     """
-    Base DRAM controller test environment. Includes control Wishbone, data
-    Wishbone bus and DFI drivers and monitors.
+    Base DRAM controller test environment. Includes control and data
+    AXI buses, DFI drivers and monitors.
     """
 
     def build_phase(self):
-        self.wb_ctrl_seqr = uvm_sequencer("wb_ctrl_seqr", self)
-        self.wb_data_seqr = uvm_sequencer("wb_data_seqr", self)
+        self.ctrl_seqr = uvm_sequencer("ctrl_seqr", self)
+        self.data_seqr = uvm_sequencer("data_seqr", self)
 
-        # Control Wishbone
-        iface = WishboneInterface(cocotb.top, "clk", "wb_ctrl_")
-        self.wb_ctrl_driver = WishboneDriver("wb_ctrl_drv", self, iface=iface)
-        self.wb_ctrl_mon    = WishboneMonitor("wb_ctrl_mon", self, iface=iface)
+        # Control interface
+        iface = AxiLInterface(cocotb.top, "clk", "axi_lite_ctrl_")
+        self.ctrl_driver = BusDriver("ctrl_drv", self, iface=iface)
+        self.ctrl_mon    = AxiLMonitor("ctrl_mon", self, iface=iface)
 
-        # Data wishbone
-        iface = WishboneInterface(cocotb.top, "clk", "user_port_wishbone_0_")
-        self.wb_data_driver = WishboneDriver("wb_data_drv", self, iface=iface)
-        self.wb_data_mon    = WishboneMonitor("wb_data_mon", self, iface=iface)
+        # Data interface
+        iface = AxiInterface(cocotb.top, "clk", "user_port_axi_")
+        self.data_driver = BusDriver("data_drv", self, iface=iface)
+        self.data_mon    = AxiLMonitor("data_mon", self, iface=iface)
 
         # DFI
         # if ConfigDB().get(None, "dfi", "memtype") == "LPDDR4":
@@ -499,8 +665,8 @@ class BaseEnv(uvm_env):
         self.dfi_mon        = DFIMonitor("dfi_mon", self, iface=iface)
 
     def connect_phase(self):
-        self.wb_ctrl_driver.seq_item_port.connect(self.wb_ctrl_seqr.seq_item_export)
-        self.wb_data_driver.seq_item_port.connect(self.wb_data_seqr.seq_item_export)
+        self.ctrl_driver.seq_item_port.connect(self.ctrl_seqr.seq_item_export)
+        self.data_driver.seq_item_port.connect(self.data_seqr.seq_item_export)
         self.dfi_driver.seq_item_port.connect(self.dfi_mon.rp)
 
 # =============================================================================
@@ -577,7 +743,7 @@ class BaseTest(uvm_test):
         await self.do_reset()
 
         # Initialize the controller
-        await self.init_seq.start(self.env.wb_ctrl_seqr)
+        await self.init_seq.start(self.env.ctrl_seqr)
 
         # Check if the controller is initialized
         if cocotb.top.init_done.value != 1:

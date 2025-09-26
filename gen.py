@@ -11,9 +11,10 @@ import string
 import sys
 from typing import Sequence
 
-from litedram.phy.utils import CommandsPipeline
+from litedram.phy.utils import delayed
+from litex.soc.interconnect import axi
 
-from third_party.litedram.litedram.phy.utils import delayed
+from litedram.frontend.axi import LiteDRAMAXI2Native, LiteDRAMAXIPort
 
 filepath = os.path.join(os.path.dirname(os.path.abspath(__file__)), "src")
 sys.path.append(filepath)
@@ -136,6 +137,7 @@ def get_axi_user_port_ios(_id, aw, dw, iw):
             Subsignal("awlen",   Pins(8)),
             Subsignal("awsize",  Pins(4)),
             Subsignal("awid",    Pins(iw)),
+            Subsignal("awprot",  Pins(1)),
 
             # w
             Subsignal("wvalid", Pins(1)),
@@ -158,6 +160,7 @@ def get_axi_user_port_ios(_id, aw, dw, iw):
             Subsignal("arlen",   Pins(8)),
             Subsignal("arsize",  Pins(4)),
             Subsignal("arid",    Pins(iw)),
+            Subsignal("arprot",  Pins(1)),
 
             # r
             Subsignal("rvalid", Pins(1)),
@@ -207,7 +210,7 @@ class DRAMCoreSoC(LiteXSoC):
         # SoCCore ----------------------------------------------------------------------------------
 
         LiteXSoC.__init__(self, platform, sys_clk_freq,
-            bus_standard         = "wishbone",
+            bus_standard         = "axi-lite",
             bus_data_width       = 32,
             bus_address_width    = 32,
             bus_timeout          = 1e6,
@@ -319,11 +322,11 @@ class DRAMCoreSoC(LiteXSoC):
         self.comb += platform.request("init_error").eq(self.ddrctrl.init_error.storage)
 
         # Expose a bus control interface to user.
-        wb_bus = wishbone.Interface()
-        self.bus.add_master(master=wb_bus)
-        platform.add_extension(wb_bus.get_ios("wb_ctrl"))
-        wb_pads = platform.request("wb_ctrl")
-        self.comb += wb_bus.connect_to_pads(wb_pads, mode="slave")
+        axi_lite_bus = axi.AXILiteInterface()
+        self.bus.add_master(master=axi_lite_bus)
+        platform.add_extension(axi_lite_bus.get_ios("axi_lite_ctrl"))
+        axi_pads = platform.request("axi_lite_ctrl")
+        self.comb += axi_lite_bus.connect_to_pads(axi_pads, mode="slave")
 
         # User ports -------------------------------------------------------------------------------
 
@@ -422,6 +425,7 @@ class DRAMCoreSoC(LiteXSoC):
                     # AW Channel.
                     axi_port.aw.valid.eq(_axi_port_io.awvalid & user_enable),
                     _axi_port_io.awready.eq(axi_port.aw.ready & user_enable),
+                    axi_port.aw.prot.eq(_axi_port_io.awprot),
                     axi_port.aw.addr.eq(_axi_port_io.awaddr),
                     axi_port.aw.burst.eq(_axi_port_io.awburst),
                     axi_port.aw.len.eq(_axi_port_io.awlen),
@@ -449,6 +453,7 @@ class DRAMCoreSoC(LiteXSoC):
                     axi_port.ar.len.eq(_axi_port_io.arlen),
                     axi_port.ar.size.eq(_axi_port_io.arsize),
                     axi_port.ar.id.eq(_axi_port_io.arid),
+                    axi_port.ar.prot.eq(_axi_port_io.arprot),
 
                     # R Channel.
                     _axi_port_io.rvalid.eq(axi_port.r.valid),

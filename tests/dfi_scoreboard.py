@@ -1,6 +1,7 @@
 # Copyright (c) 2023-2024 Antmicro <www.antmicro.com>
 # SPDX-License-Identifier: Apache-2.0
 
+from math import ceil, log2
 from pyuvm import *
 
 from common import BusReadItem, BusRandomReadItem, DRAMReadItem, \
@@ -56,7 +57,7 @@ class DFIScoreboard(uvm_component):
         dram_addr  = (row  << (col_nb + bank_nb)) | \
                      (bank << (col_nb)) | col
 
-        return dram_addr // burst_len
+        return dram_addr // ceil(log2(burst_len))
 
     def check_items(self, bus_item, dfi_item):
         """

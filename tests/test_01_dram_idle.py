@@ -35,4 +35,4 @@ class TestDramIdle(BaseTest):
 
     async def run(self):
 
-        await self.idle_seq.start(self.env.wb_ctrl_seqr)
+        await self.idle_seq.start(self.env.ctrl_seqr)
